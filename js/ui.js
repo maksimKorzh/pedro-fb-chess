@@ -43,7 +43,7 @@ function onDrop (src, dst) {
         src = coords.indexOf(src).toString(16).padStart(2, '0');
         dst = coords.indexOf(dst).toString(16).padStart(2, '0');
         let command = "01f6" + src + dst;
-        window.fbchess.sendCommand(cmd);
+        window.fbchess.sendCommand(command);
     }
 }
 
@@ -67,6 +67,7 @@ window.fbchess.onData((data) => {
         let src = coords[parseInt(data.split(" ")[2], 16)];
         let dst = coords[parseInt(data.split(" ")[3], 16)];
         board.move(`${src}-${dst}`);
+        console.log(`Move: ${src}-${dst}`);
     }
     
 });
@@ -88,7 +89,17 @@ input.addEventListener("keydown", (e) => {
             }; board = Chessboard('chessboard', config);
             input.value = ""; window.fbchess.sendCommand("refresh"); return;
         }
-        window.fbchess.sendCommand(cmd);
+        
+        src = coords.indexOf(cmd[0] + cmd[1]).toString(16).padStart(2, '0');
+        dst = coords.indexOf(cmd[2] + cmd[3]).toString(16).padStart(2, '0');
+        
+        // Send user move
+        if (src != "-1" && dst != "-1") {
+            let move = "01f6" + src + dst;
+            console.log("play move", move);
+            window.fbchess.sendCommand(move);
+        } else window.fbchess.sendCommand(cmd);
+        
         input.value = "";
         let terminal = document.getElementById("output");
         terminal.scrollTop = terminal.scrollHeight;
