@@ -1,0 +1,214 @@
+:root {
+    color-scheme: dark;
+
+    --bg: #11151c;
+    --panel: #1b222d;
+    --border: #354254;
+    --text: #dce5f0;
+    --muted: #8e9bad;
+    --accent: #69d5b1;
+    --console-bg: #10161e;
+    --input-bg: #202936;
+
+    --gap: 14px;
+    --padding: 14px;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+}
+
+body {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--gap);
+    padding: var(--padding);
+
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", Arial, sans-serif;
+}
+
+#chessboard {
+    flex: 0 0 auto;
+
+    width: min(
+        calc(100vh - 2 * var(--padding)),
+        calc(100vw - 2 * var(--padding) - var(--gap)),
+        50vw
+    ) !important;
+
+    height: auto;
+    aspect-ratio: 1 / 1;
+    align-self: center;
+}
+
+#terminal {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+
+    width: 0;
+    height: min(
+        calc(100vh - 2 * var(--padding)),
+        min(
+            calc(100vh - 2 * var(--padding)),
+            calc(100vw - 2 * var(--padding) - var(--gap))
+        ),
+        50vw
+    );
+
+    min-width: 0;
+    min-height: 0;
+    align-self: center;
+
+    overflow: hidden;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 8px 28px rgb(0 0 0 / 18%);
+}
+
+#output {
+    flex: 1 1 0;
+
+    width: 100% !important;
+    height: auto !important;
+    min-width: 0;
+    min-height: 0;
+    margin: 0;
+    padding: 14px;
+
+    overflow: auto;
+    background: var(--console-bg);
+    color: var(--text);
+
+    font: 13px/1.6 "Fira Code", Consolas, monospace;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) var(--console-bg);
+}
+
+#input {
+    flex: 0 0 48px;
+
+    width: 100% !important;
+    min-width: 0;
+    padding: 0 14px;
+
+    border: 0;
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+    outline: none;
+
+    background: var(--input-bg);
+    color: var(--accent);
+
+    font: 15px "Fira Code", Consolas, monospace;
+    caret-color: var(--accent);
+}
+
+#input:focus {
+    box-shadow: inset 0 2px 0 var(--accent);
+}
+
+#input::placeholder {
+    color: var(--muted);
+}
+
+#output::-webkit-scrollbar {
+    width: 8px;
+}
+
+#output::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 8px;
+}
+
+.highlight {
+  box-shadow: inset 0 0 3px 3px yellow;
+}
+
+@media (orientation: portrait) {
+    html,
+    body {
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    body {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        padding: 10px;
+        overflow: hidden;
+    }
+
+    #chessboard {
+        flex: 0 0 auto;
+        align-self: center;
+
+        width: min(
+            100%,
+            calc(100vh - 20px - 10px - 150px)
+        ) !important;
+
+        max-width: 100%;
+        height: auto;
+        aspect-ratio: 1 / 1;
+    }
+
+    #terminal {
+        flex: 1 1 0;
+
+        width: 100%;
+        height: 0;
+        min-width: 0;
+        min-height: 0;
+        max-height: none;
+
+        align-self: stretch;
+    }
+
+    #output {
+        flex: 1 1 0;
+        min-height: 0;
+        padding: 10px;
+        font-size: 12px;
+    }
+
+    #input {
+        flex: 0 0 46px;
+        font-size: 14px;
+    }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+    :root {
+        --gap: 8px;
+        --padding: 8px;
+    }
+
+    #output {
+        padding: 8px;
+        font-size: 11px;
+    }
+
+    #input {
+        flex-basis: 38px;
+        font-size: 13px;
+    }
+}

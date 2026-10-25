@@ -1,0 +1,11 @@
+{
+    "name": "FB Chess Client",
+    "main": "FBChess.js",
+    "scripts": {
+        "start": "electron ."
+    },
+    "dependencies": {
+        "electron": "^33.0.1",
+        "ws": "^8.22.0"
+    }
+}

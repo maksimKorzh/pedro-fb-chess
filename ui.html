@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8" />
+        <title>FB Chess Client</title>
+        <link rel="stylesheet" href="css/style.css">
+        <link rel="stylesheet" href="css/chessboard-1.0.0.css">
+    </head>
+    <body>
+        <div id="chessboard"></div>
+        <div id="terminal">
+            <pre id="output" style="width: ` + (window.innerWidth - canvas.width-34) + `px; height: ` + (canvas.width-58) + `px; font-family: monospace; font-size: calc(100vw/113); overflow: auto;"></pre>
+            <input id="input" spellcheck="false" placeholder="Type a command..." style="width: ` + (window.innerWidth - canvas.width-34) + `px; font-size: 18px;" autofocus>
+        </div>
+        <script src="js/jquery-3.7.1.min.js"></script>
+        <script src="js/chessboard-1.0.0.js"></script>
+        <script src="js/ui.js"></script>
+    </body>
+</html>
