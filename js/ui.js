@@ -1,9 +1,18 @@
-let userName = "";
-
 const output = document.getElementById('output');
 const input = document.getElementById('input');
 
 var board = null, lock = 0, src = "", dst = "";
+
+const coords = [
+    "a1", "b1", "c1", "d1", "e1", "f1", "g1", "h1",
+    "a2", "b2", "c2", "d2", "e2", "f2", "g2", "h2",
+    "a3", "b3", "c3", "d3", "e3", "f3", "g3", "h3",
+    "a4", "b4", "c4", "d4", "e4", "f4", "g4", "h4",
+    "a5", "b5", "c5", "d5", "e5", "f5", "g5", "h5",
+    "a6", "b6", "c6", "d6", "e6", "f6", "g6", "h6",
+    "a7", "b7", "c7", "d7", "e7", "f7", "g7", "h7",
+    "a8", "b8", "c8", "d8", "e8", "f8", "g8", "h8",
+];
 
 function activate() {
     let squares = document.getElementsByClassName("square-55d63");
@@ -28,96 +37,38 @@ function uClick(sq) {
     }
 };
 
+// Send user move
+function onDrop (src, dst) {
+    lock = 0; if (src != dst) {
+        src = coords.indexOf(src).toString(16).padStart(2, '0');
+        dst = coords.indexOf(dst).toString(16).padStart(2, '0');
+        let command = "01f6" + src + dst;
+        window.fbchess.sendCommand(cmd);
+    }
+}
+
 var config = {
     draggable: true,
     position: "start",
-    onDrop: function (src, dst) {
-        if (src != dst) window.fbchess.sendCommand(src + dst);
-    }
+    onDrop: onDrop
 }; board = Chessboard('chessboard', config);
 
 window.addEventListener("resize", () => { board.resize(); activate(); });
-
-function style12ToFEN(input) {  // use command: set style 12
-    const fields = input.trim().split(/\s+/);
-    if (fields[0] !== "<12>" || fields.length < 22) throw new Error("Invalid or incomplete FICS style-12 message");
-    const board = fields.slice(1, 9);
-    const fenBoard = board.map(rank => {
-        let result = "";
-        let empty = 0;
-        for (const piece of rank) {
-            if (piece === "-") empty++;
-            else {
-                if (empty > 0) {
-                    result += empty;
-                    empty = 0;
-                } result += piece;
-            }
-        } if (empty > 0) result += empty;
-    return result;
-    }).join("/");
-    const sideToMove = fields[9].toLowerCase() === "b" ? "b" : "w";
-    const castlingRights = fields[10];
-    const enPassantFile = Number(fields[11]);
-    const halfmoveClock = Number(fields[14]);
-    const fullmoveNumber = Number(fields[15]);
-    let castling = "";
-    if (castlingRights & 1) castling += "K";
-    if (castlingRights & 2) castling += "Q";
-    if (castlingRights & 4) castling += "k";
-    if (castlingRights & 8) castling += "q";
-    if (!castling) castling = "-";
-    let enPassant = "-";
-    if (enPassantFile >= 0 && enPassantFile <= 7) {
-        const rank = sideToMove === "w" ? "6" : "3";
-        enPassant = "abcdefgh"[enPassantFile] + rank;
-    } return `${fenBoard} ${sideToMove} ${castling} ${enPassant} ${halfmoveClock} ${fullmoveNumber}`;
-}
 
 window.fbchess.onData((data) => {
     output.textContent += data;
     output.scrollTop = output.scrollHeight;
 
-    if (data.includes("Starting FICS session as ")) {
-        userName = data
-            .split("Starting FICS session as ")[1]
-            .trim()
-            .split(/\s/)[0]
-            .split("(U)")[0];
-        window.fbchess.sendCommand("set style 12");
-        return;
-    }
-
-    if (data.includes("<12>")) {
-        const input = data.split("\u0007\n");
-        const position = input.find( i => i.trimStart().startsWith("<12>"));
-        if (!position) return;
-        const fen = style12ToFEN(position.trim());
-        board.position(fen, false);
-        requestAnimationFrame(() => {
-            let hl = data.split(")")[1].trim().split(" ")[0].replace("+", "").slice(-2);
-            if (data.includes("O-O-O")) {
-                if (fen.includes(" w ")) hl = "c8";
-                else if (fen.includes(" b ")) hl = "c1";
-            } else if (data.includes("O-O")) {
-                if (fen.includes(" w ")) hl = "g8";
-                else if (fen.includes(" b ")) hl = "g1";
-            }
-            $("#chessboard").find('.square-55d63').removeClass('highlight');
-            $("#chessboard").find('.square-' + hl).addClass('highlight');
-        });
-        
-        
-
+    // Reset board
+    if (data.startsWith("01 af")) board.position("start");
+    
+    // Update move on board
+    else if (data.startsWith("02 11")) {
+        let src = coords[parseInt(data.split(" ")[2], 16)];
+        let dst = coords[parseInt(data.split(" ")[3], 16)];
+        board.move(`${src}-${dst}`);
     }
     
-    if (data.includes(userName)) {
-        if (data.includes("Illegal move") || !data.includes("<12>")) return;
-        if (data.indexOf(userName) < 100) board.orientation("white");
-        else board.orientation("black");
-    }
-    
-    activate();
 });
 
 input.addEventListener("keydown", (e) => {
@@ -133,10 +84,7 @@ input.addEventListener("keydown", (e) => {
             var config = {
                 draggable: true,
                 position: "start",
-                onDrop: function (src, dst) {
-                    lock = 0; if (src != dst)
-                    window.fbchess.sendCommand(src + dst);
-                }
+                onDrop: onDrop
             }; board = Chessboard('chessboard', config);
             input.value = ""; window.fbchess.sendCommand("refresh"); return;
         }

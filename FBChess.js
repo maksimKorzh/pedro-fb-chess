@@ -34,6 +34,7 @@ ipcMain.on('command', (event, command) => {
     if (command == "connect") {
         socket = new WebSocket('wss://chess.game8.io/ws/gameServer', { headers: { 'Origin': 'null' } });
         socket.on('open', function () {
+            // Login
             const credentials = [
                 "0268113239343638393232363232373030313238000000bc54682d5a676c514d614c7961543730544e6b715a5875546f67614f4b666d737a31463069703333584b30452e65794a6862476476636d6c30614730694f694a49545546444c564e49515449314e694973496d6c7a6333566c5a463968644349364d5463354d6a6b7a4f5441304e437769634778686557567958326c6b496a6f694d6a6b304e6a67354d6a49324d6a49334d4441784d6a67694c434a795a5846315a584e305833426865577876595751694f694a6f5a57787362794a3900000005656e5f47420a464249475f434845535305352e302e31196c617374506f7075703d3d313739323933383331373838350a0563686573730100000000000000000001",
                 "0191054c6f626279000000056368657373",
@@ -49,5 +50,27 @@ ipcMain.on('command', (event, command) => {
         socket.on('error', function (error) { event.sender.send("data", "WebSocket error\n"); });
         socket.on('close', function () { event.sender.send("data", "WebSocket connection closed.\n"); }); return socket;
     } else if (command == "disconnect") { if (socket) socket.close();
-    } else { socket.send(Buffer.from(command, 'hex')); }
+    } else if (command == "quick") {
+        // Click "Quick play" button
+        const enterLobby = [
+            "019800ff056368657373",
+            "0191134c6f6262792e63686573732e322e3131333133000000056368657373",
+            "02eb134c6f6262792e63686573732e322e3131333133",
+            "01ae056368657373",
+            "01b100",
+            "013a01",
+            "01ae056368657373"
+        ]; for (let msg of enterLobby) socket.send(Buffer.from(msg, 'hex'));
+        // and now we wait until game starts
+    } else {
+        // This is used for moves, on bad command socket will disconnect
+        socket.send(Buffer.from(command, 'hex'));
+    }
 });
+
+
+
+
+
+
+
