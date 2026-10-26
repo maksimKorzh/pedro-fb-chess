@@ -58,7 +58,7 @@ function onDrop (src, dst) {
             src = coords.indexOf(src).toString(16).padStart(2, '0');
             dst = coords.indexOf(dst).toString(16).padStart(2, '0');
             let command = "01f6" + src + dst;
-            //window.fbchess.sendCommand(command);
+            window.fbchess.sendCommand(command);
         }
 
     }
@@ -88,6 +88,8 @@ window.fbchess.onData((data) => {
     if (data.startsWith("01 af")) {
         board.position("start");
         game = new Chess();
+        output.textContent += "\n\nRESET BOARD \n\n";
+        output.scrollTop = output.scrollHeight;
     }
     
     // Update move on board
@@ -106,6 +108,12 @@ window.fbchess.onData((data) => {
         });
     }
     
+    // Auto accept matches
+    else if (hexToAscii(data.replaceAll(" ", "")).includes("ready")) {
+        output.textContent += "\n\nGAME HAS PROBABLY STARTED TYPE 'e2e4' COMMAND A FEW TIMES\n\n";
+        window.fbchess.sendCommand("012b");
+        output.scrollTop = output.scrollHeight;
+    }
 });
 
 input.addEventListener("keydown", (e) => {
@@ -124,6 +132,10 @@ input.addEventListener("keydown", (e) => {
                 onDrop: onDrop
             }; board = Chessboard('chessboard', config);
             input.value = ""; window.fbchess.sendCommand("refresh"); return;
+        } else if (cmd == "flip") {
+            board.flip();
+            input.value = "";
+            return;
         }
         
         src = coords.indexOf(cmd[0] + cmd[1]).toString(16).padStart(2, '0');

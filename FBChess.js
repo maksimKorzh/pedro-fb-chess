@@ -54,7 +54,7 @@ ipcMain.on('command', (event, command) => {
         if (socket) socket.close();
     } if (command == "lobby") {
         socket.send(Buffer.from("019800ff056368657373", 'hex'));
-    } else if (command == "test") { console.log("TEST COMMAND")
+    } else if (command == "game") { console.log("TEST COMMAND")
         let test = [
             "01910b4c6f6262792e6368657373000000056368657373",
             "01920133000000",
