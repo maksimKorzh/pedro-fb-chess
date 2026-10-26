@@ -31,6 +31,7 @@ app.whenReady().then(createWindow);
 app.on('quit', () => { if (socket) socket.close(); });
 
 ipcMain.on('command', (event, command) => {
+    console.log(`FROM UI: ${command}`);
     if (command == "connect") {
         socket = new WebSocket('wss://chess.game8.io/ws/gameServer', { headers: { 'Origin': 'null' } });
         socket.on('open', function () {
@@ -44,28 +45,35 @@ ipcMain.on('command', (event, command) => {
                 "02eb0b4c6f6262792e6368657373"
             ]; for (let msg of credentials) socket.send(Buffer.from(msg, 'hex'));
             event.sender.send("data", "Connected to web socket\n");
-            setInterval(function() { socket.send(Buffer.from("012d", "hex")); }, 5000);
+            setInterval(function() { socket.send(Buffer.from("012d", "hex")); }, 10000);
         });
         socket.on('message', function (data) { event.sender.send("data", Buffer.from(data).toString('hex').match(/.{2}/g).join(' ') + "\n"); });
         socket.on('error', function (error) { event.sender.send("data", "WebSocket error\n"); });
         socket.on('close', function () { event.sender.send("data", "WebSocket connection closed.\n"); }); return socket;
-    } else if (command == "disconnect") { if (socket) socket.close();
-    } else if (command == "quick") {
-        // Click "Quick play" button
-        const enterLobby = [
-            "019800ff056368657373",
-            "0191134c6f6262792e63686573732e322e3131333133000000056368657373",
-            "02eb134c6f6262792e63686573732e322e3131333133",
+    } else if (command == "disconnect") {
+        if (socket) socket.close();
+    } if (command == "lobby") {
+        socket.send(Buffer.from("019800ff056368657373", 'hex'));
+    } else if (command == "test") { console.log("TEST COMMAND")
+        let test = [
+            "01910b4c6f6262792e6368657373000000056368657373",
+            "01920133000000",
+            "02eb0b4c6f6262792e6368657373",
+
+            "015b00",
             "01ae056368657373",
-            "01b100",
-            "013a01",
-            "01ae056368657373"
-        ]; for (let msg of enterLobby) socket.send(Buffer.from(msg, 'hex'));
-        // and now we wait until game starts
+            "019b01",
+            
+            // match
+            "019502030d6d617463684475726174696f6e0002003100350c7475726e4475726174696f6e0002003900300b6163634475726174696f6e0001003000",
+            
+        ]; for (msg of test) socket.send(Buffer.from(msg, 'hex'));
     } else {
         // This is used for moves, on bad command socket will disconnect
+        console.log(`RAW BYTES ->${Buffer.from(command, 'hex')}<-`)
         socket.send(Buffer.from(command, 'hex'));
     }
+
 });
 
 

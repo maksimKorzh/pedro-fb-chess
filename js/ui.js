@@ -14,6 +14,12 @@ const coords = [
     "a8", "b8", "c8", "d8", "e8", "f8", "g8", "h8",
 ];
 
+function hexToAscii(hex) {
+  return hex.match(/.{1,2}/g)
+    .map(byte => String.fromCharCode(parseInt(byte, 16)))
+    .join('');
+}
+
 function activate() {
     let squares = document.getElementsByClassName("square-55d63");
     for (let i = 0; i < 64; i++) {
@@ -58,6 +64,8 @@ window.addEventListener("resize", () => { board.resize(); activate(); });
 window.fbchess.onData((data) => {
     output.textContent += data;
     output.scrollTop = output.scrollHeight;
+    
+    console.log(data.replaceAll(" ", ""), hexToAscii(data.replaceAll(" ", "")));
 
     // Reset board
     if (data.startsWith("01 af")) board.position("start");
@@ -90,7 +98,7 @@ input.addEventListener("keydown", (e) => {
             input.value = ""; window.fbchess.sendCommand("refresh"); return;
         }
         
-        src = coords.indexOf(cmd[0] + cmd[1]).toString(16).padStart(2, '0');
+        /*src = coords.indexOf(cmd[0] + cmd[1]).toString(16).padStart(2, '0');
         dst = coords.indexOf(cmd[2] + cmd[3]).toString(16).padStart(2, '0');
         
         // Send user move
@@ -98,7 +106,10 @@ input.addEventListener("keydown", (e) => {
             let move = "01f6" + src + dst;
             console.log("play move", move);
             window.fbchess.sendCommand(move);
-        } else window.fbchess.sendCommand(cmd);
+        } else window.fbchess.sendCommand(cmd);*/
+        
+        console.log(cmd)
+        window.fbchess.sendCommand(cmd);
         
         input.value = "";
         let terminal = document.getElementById("output");
