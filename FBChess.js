@@ -68,6 +68,8 @@ ipcMain.on('command', (event, command) => {
             "019502030d6d617463684475726174696f6e0002003100350c7475726e4475726174696f6e0002003900300b6163634475726174696f6e0001003000",
             
         ]; for (msg of test) socket.send(Buffer.from(msg, 'hex'));
+    } else if (command == "start") {
+        socket.send(Buffer.from("012b", 'hex'));
     } else {
         // This is used for moves, on bad command socket will disconnect
         console.log(`RAW BYTES ->${Buffer.from(command, 'hex')}<-`)

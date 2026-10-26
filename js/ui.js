@@ -46,18 +46,35 @@ function uClick(sq) {
 // Send user move
 function onDrop (src, dst) {
     lock = 0; if (src != dst) {
-        src = coords.indexOf(src).toString(16).padStart(2, '0');
-        dst = coords.indexOf(dst).toString(16).padStart(2, '0');
-        let command = "01f6" + src + dst;
-        window.fbchess.sendCommand(command);
+        var move = game.move({
+            from: src,
+            to: dst,
+            promotion: 'q' // NOTE: always promote to a queen for example simplicity
+        })
+
+        // illegal move
+        if (move === null) return 'snapback'
+        else {
+            src = coords.indexOf(src).toString(16).padStart(2, '0');
+            dst = coords.indexOf(dst).toString(16).padStart(2, '0');
+            let command = "01f6" + src + dst;
+            //window.fbchess.sendCommand(command);
+        }
+
     }
+}
+
+function onSnapEnd() {
+    board.position(game.fen());
 }
 
 var config = {
     draggable: true,
     position: "start",
-    onDrop: onDrop
+    onDrop: onDrop,
+    onSnapEnd: onSnapEnd
 }; board = Chessboard('chessboard', config);
+var game = new Chess();
 
 window.addEventListener("resize", () => { board.resize(); activate(); });
 
@@ -68,14 +85,25 @@ window.fbchess.onData((data) => {
     console.log(data.replaceAll(" ", ""), hexToAscii(data.replaceAll(" ", "")));
 
     // Reset board
-    if (data.startsWith("01 af")) board.position("start");
+    if (data.startsWith("01 af")) {
+        board.position("start");
+        game = new Chess();
+    }
     
     // Update move on board
     else if (data.startsWith("02 11")) {
         let src = coords[parseInt(data.split(" ")[2], 16)];
         let dst = coords[parseInt(data.split(" ")[3], 16)];
-        board.move(`${src}-${dst}`);
-        console.log(`Move: ${src}-${dst}`);
+        game.move({
+            from: src,
+            to: dst,
+            promotion: 'q' // NOTE: always promote to a queen for example simplicity
+        }); board.position(game.fen());
+        requestAnimationFrame(() => {
+            $("#chessboard").find('.square-55d63').removeClass('highlight');
+            $("#chessboard").find('.square-' + src).addClass('highlight');
+            $("#chessboard").find('.square-' + dst).addClass('highlight');
+        });
     }
     
 });
@@ -98,7 +126,7 @@ input.addEventListener("keydown", (e) => {
             input.value = ""; window.fbchess.sendCommand("refresh"); return;
         }
         
-        /*src = coords.indexOf(cmd[0] + cmd[1]).toString(16).padStart(2, '0');
+        src = coords.indexOf(cmd[0] + cmd[1]).toString(16).padStart(2, '0');
         dst = coords.indexOf(cmd[2] + cmd[3]).toString(16).padStart(2, '0');
         
         // Send user move
@@ -106,10 +134,7 @@ input.addEventListener("keydown", (e) => {
             let move = "01f6" + src + dst;
             console.log("play move", move);
             window.fbchess.sendCommand(move);
-        } else window.fbchess.sendCommand(cmd);*/
-        
-        console.log(cmd)
-        window.fbchess.sendCommand(cmd);
+        } else window.fbchess.sendCommand(cmd);
         
         input.value = "";
         let terminal = document.getElementById("output");
