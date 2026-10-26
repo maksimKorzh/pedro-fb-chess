@@ -110,8 +110,19 @@ window.fbchess.onData((data) => {
     
     // Auto accept matches
     else if (hexToAscii(data.replaceAll(" ", "")).includes("ready")) {
-        output.textContent += "\n\nGAME HAS PROBABLY STARTED TYPE 'e2e4' COMMAND A FEW TIMES\n\n";
+        output.textContent += "\n\nOPPONENT IS READY, ACCEPTING\n\n";
         window.fbchess.sendCommand("012b");
+        output.scrollTop = output.scrollHeight;
+    }
+    
+    // Game started
+    else if (data.startsWith("01 a1")) {
+        output.textContent += "\n\nGAME HAS PROBABLY STARTED TYPE 'e2e4' COMMAND A FEW TIMES\n\n";
+        output.scrollTop = output.scrollHeight;
+    }
+    
+    else if (data.startsWith("01 a0")) {
+        output.textContent += hexToAscii(data.replaceAll(" ", ""));
         output.scrollTop = output.scrollHeight;
     }
 });
