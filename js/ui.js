@@ -78,18 +78,47 @@ var game = new Chess();
 
 window.addEventListener("resize", () => { board.resize(); activate(); });
 
-window.fbchess.onData((data) => {
-    output.textContent += data;
+// Print to UI console
+function print(msg) {
+    output.textContent += msg;
     output.scrollTop = output.scrollHeight;
-    
+}
+
+// Extract player info
+function getPlayerInfo(data) {
+    let name = "";
+    let coins = "";
+    let rating = "";
+    let hex = data.replaceAll(" ", '')
+    let startOffset = 22;
+    while (startOffset < hex.length) {
+        let byte = parseInt(hex.slice(startOffset, startOffset + 2), 16)
+        if (byte >= 48 && byte <= 119) name += String.fromCharCode(byte);
+
+        if (hex.slice(startOffset, startOffset + 4) == "0000") {
+            coins = parseInt(hex.slice(startOffset + 12, startOffset + 16), 16);
+            rating = parseInt(hex.slice(startOffset + 28, startOffset + 32), 16);
+            break;
+        } startOffset += 2;
+    } return {
+        "name": name,
+        "coins": coins.toString(),
+        "rating": rating.toString()
+    }
+}
+
+window.fbchess.onData((data) => {
+    let stringData = hexToAscii(data.replaceAll(" ", ""));
+    if (data.includes("WebSocket")) print(data)
     console.log(data.replaceAll(" ", ""), hexToAscii(data.replaceAll(" ", "")));
 
     // Reset board
     if (data.startsWith("01 af")) {
         board.position("start");
         game = new Chess();
-        output.textContent += "\n\nRESET BOARD \n\n";
-        output.scrollTop = output.scrollHeight;
+        requestAnimationFrame(() => {
+            $("#chessboard").find('.square-55d63').removeClass('highlight');
+        });
     }
     
     // Update move on board
@@ -109,21 +138,29 @@ window.fbchess.onData((data) => {
     }
     
     // Auto accept matches
-    else if (hexToAscii(data.replaceAll(" ", "")).includes("ready")) {
-        output.textContent += "\n\nOPPONENT IS READY, ACCEPTING\n\n";
+    else if (stringData.includes("ready")) {
+        print("Opponent is ready\n");
         window.fbchess.sendCommand("012b");
-        output.scrollTop = output.scrollHeight;
+        print("Accepting match...\n");
     }
-    
+        
     // Game started
     else if (data.startsWith("01 a1")) {
-        output.textContent += "\n\nGAME HAS PROBABLY STARTED TYPE 'e2e4' COMMAND A FEW TIMES\n\n";
-        output.scrollTop = output.scrollHeight;
+        let hex = data.replaceAll(" ", "")
+        let side = parseInt(hex.slice(-2)[0]);
+        board.flip((side == 0 ? "white" : "black"));
+        print(`Game started\n`);
     }
     
-    else if (data.startsWith("01 a0")) {
-        output.textContent += hexToAscii(data.replaceAll(" ", ""));
-        output.scrollTop = output.scrollHeight;
+    // Game over
+    else if (data.startsWith("01 a2")) {
+        print("Game finished\n");
+    }
+
+    // Extract player info
+    else if (data.startsWith("01 96")) {
+        let player = getPlayerInfo(data);
+        print(`Player info ${player.name}(${player.rating}) with ${player.coins} coins\n`)
     }
 });
 
