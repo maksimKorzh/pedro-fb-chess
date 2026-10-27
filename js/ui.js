@@ -107,22 +107,63 @@ function getPlayerInfo(data) {
     }
 }
 
+// Slot names
+function extractStrings(hex) {
+    const bytes = hex.match(/[0-9a-f]{2}/gi)?.map(b => parseInt(b, 16)) || [];
+    const strings = [];
+
+    for (let i = 0; i + 1 < bytes.length;) {
+        if (bytes[i] >= 32 && bytes[i] <= 126 && bytes[i + 1] === 0) {
+            let s = '';
+
+            while (
+                i + 1 < bytes.length &&
+                bytes[i] >= 32 && bytes[i] <= 126 &&
+                bytes[i + 1] === 0
+            ) {
+                s += String.fromCharCode(bytes[i]);
+                i += 2;
+            }
+
+            // Handle a final character with a nonzero second byte
+            if (
+                i + 1 < bytes.length &&
+                bytes[i] >= 32 && bytes[i] <= 126 &&
+                bytes[i + 1] === 1
+            ) {
+                s += String.fromCharCode(bytes[i]);
+                i += 2;
+            }
+
+            if (s.length >= 2) {
+                strings.push(s);
+            }
+        } else {
+            i++;
+        }
+    }
+
+    return strings;
+}
+
+// Time control
+function decodeClock(hex) {
+    const bytes = hex.match(/.{2}/g).map(b => parseInt(b, 16));
+    const player = bytes[2] === 1 ? 'Black' : 'White';
+    const seconds = (bytes[5] << 8) | bytes[6];
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${player}: ${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
+}
+
 window.fbchess.onData((data) => {
-    let stringData = hexToAscii(data.replaceAll(" ", ""));
+    let hex = data.replaceAll(" ", "");
+    
     if (data.includes("WebSocket")) print(data)
     console.log(data.replaceAll(" ", ""), hexToAscii(data.replaceAll(" ", "")));
-
-    // Reset board
-    if (data.startsWith("01 af")) {
-        board.position("start");
-        game = new Chess();
-        requestAnimationFrame(() => {
-            $("#chessboard").find('.square-55d63').removeClass('highlight');
-        });
-    }
     
     // Update move on board
-    else if (data.startsWith("02 11")) {
+    if (data.startsWith("02 11")) {
         let src = coords[parseInt(data.split(" ")[2], 16)];
         let dst = coords[parseInt(data.split(" ")[3], 16)];
         game.move({
@@ -137,30 +178,52 @@ window.fbchess.onData((data) => {
         });
     }
     
-    // Auto accept matches
-    else if (stringData.includes("ready")) {
+    // Set player status
+    else if (data.startsWith("01 a5")) {
         print("Opponent is ready\n");
-        window.fbchess.sendCommand("012b");
-        print("Accepting match...\n");
     }
         
     // Game started
     else if (data.startsWith("01 a1")) {
-        let hex = data.replaceAll(" ", "")
         let side = parseInt(hex.slice(-2)[0]);
         board.flip((side == 0 ? "white" : "black"));
-        print(`Game started\n`);
+        board.position("start");
+        game = new Chess();
+        requestAnimationFrame(() => {
+            $("#chessboard").find('.square-55d63').removeClass('highlight');
+        }); print(`Game started\n`);
     }
     
     // Game over
     else if (data.startsWith("01 a2")) {
+        requestAnimationFrame(() => {
+            $("#chessboard").find('.square-55d63').removeClass('highlight');
+        });
         print("Game finished\n");
     }
 
-    // Extract player info
+    // Player entered
     else if (data.startsWith("01 96")) {
         let player = getPlayerInfo(data);
-        print(`Player info ${player.name}(${player.rating}) with ${player.coins} coins\n`)
+        print(`Player entered ${player.name}(${player.rating}) with ${player.coins} coins\n`)
+    }
+    
+    // Player exited
+    else if (data.startsWith("01 97")) {
+        print("Player exited\n")
+    }
+    
+    // Slot changed
+    else if (data.startsWith("01 a0")) {
+        //                           side ?
+        // 01a00004004a00750061006e   01    00000000001db8b3000000000000047906007a4468747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3338302f31383336353338302e706e673f743d3137373235373937353901000000000001183bc4000000000000000002434f
+        let name = extractStrings(hex)[0];
+        print(`Slot in table: "${name.replace("undefined", "none")}"\n`)
+    }
+    
+    // Clock
+    else if (data.startsWith("01 a4")) {
+        print(decodeClock(hex) + "\n");
     }
 });
 
