@@ -50,29 +50,7 @@ ipcMain.on("command", (event, command) => {
         socket.on("close", function () { event.sender.send("data", "WebSocket connection closed.\n"); }); return socket;
     } else if (command == "disconnect") {
         if (socket) socket.close();
-    } if (command == "lobby") {
-        socket.send(Buffer.from("019800ff056368657373", "hex"));
-    } else if (command == "game") {
-        let createGame = [
-            "01910b4c6f6262792e6368657373000000056368657373",
-            "01920133000000",
-            "02eb0b4c6f6262792e6368657373",
-            "015b00",
-            "01ae056368657373",
-            "019b01",
-            
-            // match 15 main time, 60s per move
-            "019502030d6d617463684475726174696f6e0002003100350c7475726e4475726174696f6e0002003900300b6163634475726174696f6e0001003000"
-            
-        ]; for (msg of createGame) socket.send(Buffer.from(msg, "hex"));
-    } else if (command == "start") {
-        socket.send(Buffer.from("012b", "hex"));
-    } else if (command == "resign") {
-        socket.send(Buffer.from("0216", "hex"));
-    } else {
-        // This is used for moves, on bad command socket will disconnect
-        socket.send(Buffer.from(command, "hex"));
-    }
+    } else socket.send(Buffer.from(command, "hex"));
 });
 
 

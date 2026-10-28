@@ -20,29 +20,6 @@ function hexToAscii(hex) {
     .join('');
 }
 
-function activate() {
-    let squares = document.getElementsByClassName("square-55d63");
-    for (let i = 0; i < 64; i++) {
-        let square = squares[i];
-        square.onclick = function() { uClick(this.id); };
-    }
-}
-
-function uClick(sq) {
-    sq = sq.split("-")[0];
-    if (!lock) { src = sq; lock = 1; } else {
-        dst = sq;
-        window.fbchess.sendCommand(src + dst);
-        lock = 0;
-    } let squares = document.getElementsByClassName("square-55d63");
-    for (let i = 0; i < 64; i++)  {
-        let square = squares[i];
-        let current = square.id.split("-")[0];;
-        if (current == src) square.classList.add("highlight");
-        else square.classList.remove("highlight");
-    }
-};
-
 // Send user move
 function onDrop (src, dst) {
     lock = 0; if (src != dst) {
@@ -76,7 +53,7 @@ var config = {
 }; board = Chessboard('chessboard', config);
 var game = new Chess();
 
-window.addEventListener("resize", () => { board.resize(); activate(); });
+window.addEventListener("resize", () => { board.resize();g });
 
 // Print to UI console
 function print(msg) {
@@ -205,35 +182,51 @@ window.fbchess.onData((data) => {
 input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
         const cmd = input.value;
-        if (cmd == "click") {
-            var config = {
-                draggable: false,
-                position: "start",
-            }; board = Chessboard('chessboard', config);
-            input.value = ""; activate(); window.fbchess.sendCommand("refresh"); return;
-        } else if (cmd == "drag") {
-            var config = {
-                draggable: true,
-                position: "start",
-                onDrop: onDrop
-            }; board = Chessboard('chessboard', config);
-            input.value = ""; window.fbchess.sendCommand("refresh"); return;
-        } else if (cmd == "flip") {
+        
+        // Temp
+        if (cmd == "flip") {
+            board.position(game.fen());
             board.flip();
             input.value = "";
             return;
         }
         
+        /******************************\
+         ==============================
+         
+                 SERVER COMMANDS
+                 
+         ==============================
+        \******************************/
         
-        // Send user move
-        src = coords.indexOf(cmd[0] + cmd[1]).toString(16).padStart(2, '0');
-        dst = coords.indexOf(cmd[2] + cmd[3]).toString(16).padStart(2, '0');
-        if (src != "-1" && dst != "-1") {
-            let move = "01f6" + src + dst;
-            console.log("play move", move);
-            window.fbchess.sendCommand(move);
-        } else window.fbchess.sendCommand(cmd);
+        if (cmd == "game") {
+            let createGame = [
+                "01910b4c6f6262792e6368657373000000056368657373",
+                "01920133000000",
+                "02eb0b4c6f6262792e6368657373",
+                "015b00",
+                "01ae056368657373",
+                "019b01",
+                
+                // match 15 main time, 60s per move
+                "019502030d6d617463684475726174696f6e0002003100350c7475726e4475726174696f6e0002003900300b6163634475726174696f6e0001003000"
+            ]; for (let msg of createGame) window.fbchess.sendCommand(msg);
+        } else if (cmd == "start") {
+            window.fbchess.sendCommand("012b");
+        } else if (cmd == "resign") {
+            window.fbchess.sendCommand("0216");
+        } else {
+            // Send user move
+            src = coords.indexOf(cmd[0] + cmd[1]).toString(16).padStart(2, '0');
+            dst = coords.indexOf(cmd[2] + cmd[3]).toString(16).padStart(2, '0');
+            if (src != "-1" && dst != "-1") {
+                let move = "01f6" + src + dst;
+                console.log("play move", move);
+                window.fbchess.sendCommand(move);
+            } else window.fbchess.sendCommand(cmd);
+        }
         
+        // Clear command, scroll terminal
         input.value = "";
         let terminal = document.getElementById("output");
         terminal.scrollTop = terminal.scrollHeight;
