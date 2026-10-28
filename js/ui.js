@@ -23,19 +23,29 @@ function hexToAscii(hex) {
 
 // Send user move
 function onDrop (src, dst) {
-    lock = 0; if (src != dst) {
+    if (src != dst) {
+        let prom = 0;
+        
         var move = game.move({
             from: src,
             to: dst,
             promotion: 'q' // NOTE: always promote to a queen for example simplicity
-        })
+        });
+        
+        // Promotion
+        try { if (move.flags.includes("p")) prom = 1; }
+        catch (e) {}
 
-        // illegal move
+        // Illegal move
         if (move === null) return 'snapback'
         else {
             src = coords.indexOf(src).toString(16).padStart(2, '0');
             dst = coords.indexOf(dst).toString(16).padStart(2, '0');
             let command = "01f6" + src + dst;
+            
+            // promotion
+            if (prom) command += "01";
+            
             window.fbchess.sendCommand(command);
         }
 
@@ -142,7 +152,7 @@ window.fbchess.onData((data) => {
     else if (data.startsWith("01a1")) {
         board.position("start");
         game = new Chess();
-        board.flip((userSide ? "black" : "white"));
+        board.flip((userSide == 1 ? "black" : "white"));
         requestAnimationFrame(() => {
             $("#chessboard").find('.square-55d63').removeClass('highlight');
         }); print(`Game started\n`);
