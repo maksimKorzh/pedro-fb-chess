@@ -85,11 +85,10 @@ function print(msg) {
 }
 
 // Extract player info
-function getPlayerInfo(data) {
+function getPlayerInfo(hex) {
     let name = "";
     let coins = "";
     let rating = "";
-    let hex = data.replaceAll(" ", '')
     let startOffset = 22;
     while (startOffset < hex.length) {
         let byte = parseInt(hex.slice(startOffset, startOffset + 2), 16)
@@ -111,39 +110,18 @@ function getPlayerInfo(data) {
 function extractStrings(hex) {
     const bytes = hex.match(/[0-9a-f]{2}/gi)?.map(b => parseInt(b, 16)) || [];
     const strings = [];
-
     for (let i = 0; i + 1 < bytes.length;) {
         if (bytes[i] >= 32 && bytes[i] <= 126 && bytes[i + 1] === 0) {
             let s = '';
-
-            while (
-                i + 1 < bytes.length &&
-                bytes[i] >= 32 && bytes[i] <= 126 &&
-                bytes[i + 1] === 0
-            ) {
+            while ( i + 1 < bytes.length && bytes[i] >= 32 && bytes[i] <= 126 && bytes[i + 1] === 0 ) {
                 s += String.fromCharCode(bytes[i]);
                 i += 2;
-            }
-
-            // Handle a final character with a nonzero second byte
-            if (
-                i + 1 < bytes.length &&
-                bytes[i] >= 32 && bytes[i] <= 126 &&
-                bytes[i + 1] === 1
-            ) {
+            } if (i + 1 < bytes.length && bytes[i] >= 32 && bytes[i] <= 126 && bytes[i + 1] === 1) {
                 s += String.fromCharCode(bytes[i]);
                 i += 2;
-            }
-
-            if (s.length >= 2) {
-                strings.push(s);
-            }
-        } else {
-            i++;
-        }
-    }
-
-    return strings;
+            } if (s.length >= 2) strings.push(s);
+        } else i++;
+    } return strings;
 }
 
 // Time control
@@ -157,15 +135,13 @@ function decodeClock(hex) {
 }
 
 window.fbchess.onData((data) => {
-    let hex = data.replaceAll(" ", "");
-    
     if (data.includes("WebSocket")) print(data)
     console.log(data.replaceAll(" ", ""), hexToAscii(data.replaceAll(" ", "")));
     
     // Update move on board
-    if (data.startsWith("02 11")) {
-        let src = coords[parseInt(data.split(" ")[2], 16)];
-        let dst = coords[parseInt(data.split(" ")[3], 16)];
+    if (data.startsWith("0211")) {
+        let src = coords[parseInt((data[4] + data[5]), 16)];
+        let dst = coords[parseInt((data[6] + data[7]), 16)];
         game.move({
             from: src,
             to: dst,
@@ -179,13 +155,13 @@ window.fbchess.onData((data) => {
     }
     
     // Set player status
-    else if (data.startsWith("01 a5")) {
+    else if (data.startsWith("01a5")) {
         print("Opponent is ready\n");
     }
         
     // Game started
-    else if (data.startsWith("01 a1")) {
-        let side = parseInt(hex.slice(-2)[0]);
+    else if (data.startsWith("01a1")) {
+        let side = parseInt(data.slice(-2)[0]); // this is wrong
         board.flip((side == 0 ? "white" : "black"));
         board.position("start");
         game = new Chess();
@@ -195,35 +171,34 @@ window.fbchess.onData((data) => {
     }
     
     // Game over
-    else if (data.startsWith("01 a2")) {
+    else if (data.startsWith("01a2")) {
         requestAnimationFrame(() => {
             $("#chessboard").find('.square-55d63').removeClass('highlight');
-        });
-        print("Game finished\n");
+        }); print("Game finished\n");
     }
 
     // Player entered
-    else if (data.startsWith("01 96")) {
+    else if (data.startsWith("0196")) {
         let player = getPlayerInfo(data);
         print(`Player entered ${player.name}(${player.rating}) with ${player.coins} coins\n`)
     }
     
     // Player exited
-    else if (data.startsWith("01 97")) {
+    else if (data.startsWith("0197")) {
         print("Player exited\n")
     }
     
     // Slot changed
-    else if (data.startsWith("01 a0")) {
+    else if (data.startsWith("01a0")) {
         //                           side ?
         // 01a00004004a00750061006e   01    00000000001db8b3000000000000047906007a4468747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3338302f31383336353338302e706e673f743d3137373235373937353901000000000001183bc4000000000000000002434f
-        let name = extractStrings(hex)[0];
+        let name = extractStrings(data)[0];
         print(`Slot in table: "${name.replace("undefined", "none")}"\n`)
     }
     
     // Clock
-    else if (data.startsWith("01 a4")) {
-        print(decodeClock(hex) + "\n");
+    else if (data.startsWith("01a4")) {
+        print(decodeClock(data) + "\n");
     }
 });
 
@@ -249,10 +224,10 @@ input.addEventListener("keydown", (e) => {
             return;
         }
         
-        src = coords.indexOf(cmd[0] + cmd[1]).toString(16).padStart(2, '0');
-        dst = coords.indexOf(cmd[2] + cmd[3]).toString(16).padStart(2, '0');
         
         // Send user move
+        src = coords.indexOf(cmd[0] + cmd[1]).toString(16).padStart(2, '0');
+        dst = coords.indexOf(cmd[2] + cmd[3]).toString(16).padStart(2, '0');
         if (src != "-1" && dst != "-1") {
             let move = "01f6" + src + dst;
             console.log("play move", move);
