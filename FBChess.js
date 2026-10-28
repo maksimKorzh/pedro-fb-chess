@@ -1,6 +1,8 @@
 const { app, BrowserWindow, ipcMain, Menu } = require("electron");
+const { spawn } = require('child_process');
 const WebSocket = require("ws");
 var socket = null;
+var engine = null;
 
 function createWindow() {
     const win = new BrowserWindow({
@@ -31,6 +33,36 @@ app.on("quit", () => { if (socket) socket.close(); });
 
 ipcMain.on("command", (event, command) => {
     if (command == "connect") {
+        
+        /*******************************\
+         ===============================
+                    
+                      Engine
+                    
+         ===============================
+        \*******************************/
+        
+        engine = spawn( "./stockfish", { detached: true, stdio: ["pipe", "pipe", "pipe"] });
+        engine.stdout.on("data", (data) => {
+            let response = data.toString();
+            if (response.includes("bestmove")) {
+                let move = response.split("bestmove ")[1].split(" ")[0];
+                event.sender.send("data", "uci:" + move + "\n");
+            }
+            console.log("ENGINGE:", response);
+        }); engine.on("exit", (code, signal) => { console.error("engine: exited"); });
+        engine.on("error", (err) => { console.error("engine:", err); });
+        engine.stderr.on("data", (data) => { console.log("engine:", data.toString()); });
+        
+        
+        /*******************************\
+         ===============================
+                    
+                    Web Socket
+                    
+         ===============================
+        \*******************************/
+        
         socket = new WebSocket("wss://chess.game8.io/ws/gameServer", { headers: { "Origin": "null" } });
         socket.on("open", function () {
             const credentials = [
@@ -55,17 +87,17 @@ ipcMain.on("command", (event, command) => {
             event.sender.send("data", "Connected to WebSocket\n");
             setInterval(function() { socket.send(Buffer.from("012d", "hex")); }, 10000);
         });
-        socket.on("message", function (data) { event.sender.send("data", Buffer.from(data).toString("hex")/*.match(/.{2}/g).join("")*/ + "\n"); });
+        socket.on("message", function (data) { event.sender.send("data", Buffer.from(data).toString("hex") + "\n"); });
         socket.on("error", function (error) { event.sender.send("data", "WebSocket error\n"); });
         socket.on("close", function () { event.sender.send("data", "WebSocket connection closed.\n"); }); return socket;
     } else if (command == "disconnect") {
         if (socket) socket.close();
+        if (engine) engine.kill();
+    } else if (command.includes("uci:")) {
+        command = command.split("uci:")[1];
+        engine.stdin.write(command + "\n");
     } else socket.send(Buffer.from(command, "hex"));
 });
-
-
-
-
 
 
 

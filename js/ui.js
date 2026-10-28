@@ -64,7 +64,7 @@ var config = {
 }; board = Chessboard('chessboard', config);
 var game = new Chess();
 
-window.addEventListener("resize", () => { board.resize();g });
+window.addEventListener("resize", () => { board.resize(); });
 
 // Print to UI console
 function print(msg) {
@@ -123,7 +123,7 @@ function decodeClock(hex) {
 }
 
 window.fbchess.onData((data) => {
-    if (data.includes("WebSocket")) print(data)
+    if (data.includes("WebSocket")) print(data);
     console.log(data.replaceAll(" ", ""), hexToAscii(data.replaceAll(" ", "")));
     
     // Update move on board
@@ -135,6 +135,7 @@ window.fbchess.onData((data) => {
             to: dst,
             promotion: 'q' // NOTE: always promote to a queen for example simplicity
         }); board.position(game.fen());
+        
         requestAnimationFrame(() => {
             $("#chessboard").find('.square-55d63').removeClass('highlight');
             $("#chessboard").find('.square-' + src).addClass('highlight');
@@ -150,6 +151,7 @@ window.fbchess.onData((data) => {
         
     // Game started
     else if (data.startsWith("01a1")) {
+        window.fbchess.sendCommand("data", "uci:ucinewgame");
         board.position("start");
         game = new Chess();
         board.flip((userSide == 1 ? "black" : "white"));
@@ -193,6 +195,35 @@ window.fbchess.onData((data) => {
         let time = decodeClock(data);
         if (!time.includes("0:00") && !time.includes("15:00")) print(time + "\n");
     }
+    
+    // Engine move
+    else if (data.includes("uci:")) {
+        data = data.split("uci:")[1];
+        let prom = 0;
+        let src = data[0] + data[1];
+        let dst = data[2] + data[3];
+        console.log("best move:", src+dst)
+        
+        var move = game.move({
+            from: src,
+            to: dst,
+            promotion: 'q'
+        });
+        
+        // Promotion
+        try { if (move.flags.includes("p")) prom = 1; }
+        catch (e) {}
+
+        src = coords.indexOf(src).toString(16).padStart(2, '0');
+        dst = coords.indexOf(dst).toString(16).padStart(2, '0');
+        let command = "01f6" + src + dst;
+        
+        // promotion
+        if (prom) command += "01";    
+        
+        // Send engine move
+        window.fbchess.sendCommand(command);
+    }
 });
 
 input.addEventListener("keydown", (e) => {
@@ -231,6 +262,12 @@ input.addEventListener("keydown", (e) => {
             window.fbchess.sendCommand("012b");
         } else if (cmd == "resign") {
             window.fbchess.sendCommand("0216");
+        } else if (cmd == "move") {
+            // Sync engine
+            window.fbchess.sendCommand(`uci:position fen '${game.fen()}'`);
+            
+            // Make best move
+            window.fbchess.sendCommand("uci:go time 1");
         } else {
             // Send user move
             src = coords.indexOf(cmd[0] + cmd[1]).toString(16).padStart(2, '0');
