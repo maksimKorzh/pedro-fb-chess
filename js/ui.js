@@ -1,6 +1,7 @@
 const output = document.getElementById('output');
 const input = document.getElementById('input');
 
+let userName = ""; userSide = 0;
 var board = null, lock = 0, src = "", dst = "";
 
 const coords = [
@@ -70,7 +71,6 @@ function getPlayerInfo(hex) {
     while (startOffset < hex.length) {
         let byte = parseInt(hex.slice(startOffset, startOffset + 2), 16)
         if (byte >= 48 && byte <= 119) name += String.fromCharCode(byte);
-
         if (hex.slice(startOffset, startOffset + 4) == "0000") {
             coins = parseInt(hex.slice(startOffset + 12, startOffset + 16), 16);
             rating = parseInt(hex.slice(startOffset + 28, startOffset + 32), 16);
@@ -84,21 +84,22 @@ function getPlayerInfo(hex) {
 }
 
 // Slot names
-function extractStrings(hex) {
+function getSlot(hex) {
     const bytes = hex.match(/[0-9a-f]{2}/gi)?.map(b => parseInt(b, 16)) || [];
-    const strings = [];
+    let side = 0;
     for (let i = 0; i + 1 < bytes.length;) {
         if (bytes[i] >= 32 && bytes[i] <= 126 && bytes[i + 1] === 0) {
-            let s = '';
+            let name = '';
             while ( i + 1 < bytes.length && bytes[i] >= 32 && bytes[i] <= 126 && bytes[i + 1] === 0 ) {
-                s += String.fromCharCode(bytes[i]);
+                name += String.fromCharCode(bytes[i]);
                 i += 2;
             } if (i + 1 < bytes.length && bytes[i] >= 32 && bytes[i] <= 126 && bytes[i + 1] === 1) {
-                s += String.fromCharCode(bytes[i]);
+                name += String.fromCharCode(bytes[i]);
+                side = 1;
                 i += 2;
-            } if (s.length >= 2) strings.push(s);
+            } if (name.length >= 2) return { "name": name, "side": side };
         } else i++;
-    } return strings;
+    } return { name: 'empty', side: -1 };
 }
 
 // Time control
@@ -133,15 +134,15 @@ window.fbchess.onData((data) => {
     
     // Set player status
     else if (data.startsWith("01a5")) {
-        print("Opponent is ready\n");
+        print("Opponent is ready, accepting match...\n");
+        window.fbchess.sendCommand("012b");
     }
         
     // Game started
     else if (data.startsWith("01a1")) {
-        let side = parseInt(data.slice(-2)[0]); // this is wrong
-        board.flip((side == 0 ? "white" : "black"));
         board.position("start");
         game = new Chess();
+        board.flip((userSide ? "black" : "white"));
         requestAnimationFrame(() => {
             $("#chessboard").find('.square-55d63').removeClass('highlight');
         }); print(`Game started\n`);
@@ -157,6 +158,7 @@ window.fbchess.onData((data) => {
     // Player entered
     else if (data.startsWith("0196")) {
         let player = getPlayerInfo(data);
+        if (userName == "") userName = player.name;
         print(`Player entered ${player.name}(${player.rating}) with ${player.coins} coins\n`)
     }
     
@@ -167,15 +169,19 @@ window.fbchess.onData((data) => {
     
     // Slot changed
     else if (data.startsWith("01a0")) {
-        //                           side ?
-        // 01a00004004a00750061006e   01    00000000001db8b3000000000000047906007a4468747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3338302f31383336353338302e706e673f743d3137373235373937353901000000000001183bc4000000000000000002434f
-        let name = extractStrings(data)[0];
-        print(`Slot in table: "${name.replace("undefined", "none")}"\n`)
+        let slot = getSlot(data);
+        let name = slot.name;
+        let side = slot.side;
+        let color = (side ? "Black" : "White");
+        let you = (name == userName);
+        if (you) userSide = side;
+        print(`${color} is ${name + (you ? "(you)" : "")}\n`);
     }
     
     // Clock
     else if (data.startsWith("01a4")) {
-        print(decodeClock(data) + "\n");
+        let time = decodeClock(data);
+        if (!time.includes("0:00") && !time.includes("15:00")) print(time + "\n");
     }
 });
 
