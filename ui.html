@@ -9,6 +9,7 @@
     <body>
         <div id="chessboard"></div>
         <div id="terminal">
+            <button style="height: 40px; font-size: 20px;" id="stockfish">Ask Stockfish for a move</button>
             <pre id="output" style="width: ` + (window.innerWidth - canvas.width-34) + `px; height: ` + (canvas.width-58) + `px; font-family: monospace; font-size: calc(100vw/113); overflow: auto;"></pre>
             <input id="input" spellcheck="false" placeholder="Type a command..." style="width: ` + (window.innerWidth - canvas.width-34) + `px; font-size: 18px;" autofocus>
         </div>

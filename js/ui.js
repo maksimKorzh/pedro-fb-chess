@@ -187,7 +187,9 @@ window.fbchess.onData((data) => {
         let color = (side ? "Black" : "White");
         let you = (name == userName);
         if (you) userSide = side;
-        print(`${color} is ${name + (you ? "(you)" : "")}\n`);
+        if (name != userName && name != "empty") userSide = side ^ 1;
+        let userColor = (userSide ? "Black" : "White");
+        print(`${color} is ${name + (you ? "(you)" : "")}, user side is ${userColor}\n`);
     }
     
     // Clock
@@ -248,13 +250,12 @@ input.addEventListener("keydown", (e) => {
         
         if (cmd == "game") {
             let createGame = [
+                // Enter place
                 "01910b4c6f6262792e6368657373000000056368657373",
-                "01920133000000",
-                "02eb0b4c6f6262792e6368657373",
-                "015b00",
-                "01ae056368657373",
-                "019b01",
                 
+                // Enter child place
+                "01920133000000",
+
                 // match 15 main time, 60s per move
                 "019502030d6d617463684475726174696f6e0002003100350c7475726e4475726174696f6e0002003900300b6163634475726174696f6e0001003000"
             ]; for (let msg of createGame) window.fbchess.sendCommand(msg);
@@ -284,4 +285,13 @@ input.addEventListener("keydown", (e) => {
         let terminal = document.getElementById("output");
         terminal.scrollTop = terminal.scrollHeight;
     }
+});
+
+// Stockfish button
+document.getElementById("stockfish").addEventListener("click", function() {
+    // Sync engine
+    window.fbchess.sendCommand(`uci:position fen '${game.fen()}'`);
+    
+    // Make best move
+    window.fbchess.sendCommand("uci:go time 1");
 });
