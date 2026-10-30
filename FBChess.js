@@ -13,10 +13,11 @@ var engine = null;
 
 // App constants
 const KEEP_ALIVE_INTERVAL = 7500;
-
 const OPCODES = {
     "PONG": 300,
     "PING": 301,
+    "MOVE": 529,
+    "PLAY": 502,
     "LOGIN_FB_SIGNATURE2": 616
 };
 
@@ -46,7 +47,10 @@ function initEngine(sender) {
         let response = data.toString();
         if (response.includes("bestmove")) {
             let move = response.split("bestmove ")[1].split(" ")[0];
-            sender.send("engine", move + "\n");
+            let src = move[0] + move[1];
+            let dst = move[2] + move[3];
+            let msg = {"src": src, "dst": dst, "prom": move[4]};
+            sender.send("engine", JSON.stringify(msg));
         }
         console.log("ENGINGE:", response);
     }); engine.on("exit", (code, signal) => { console.error("engine: exited"); });
@@ -61,6 +65,59 @@ function initEngine(sender) {
             
  ===============================
 \*******************************/
+
+// Login via facebook instant games
+function fbLogin(win) {
+    win.loadURL("https://www.facebook.com/gaming/play/194060244713436/");
+    const interval = setInterval(async () => {
+        const frames = win.webContents.mainFrame.framesInSubtree;
+        for (const frame of frames) {
+            if (!frame.url.includes("194060244713436")) continue;
+            try {
+                const credentials = await frame.executeJavaScript(`
+                    (async () => {
+                        if (!window.FBInstant) { throw new Error("FBInstant is unavailable"); }
+                        const signedInfo = await FBInstant.player.getSignedPlayerInfoAsync("hello");
+                        let playerId = FBInstant.player.getID();
+                        if (playerId == null || playerId === "") playerId = signedInfo.getPlayerID();
+                        return {
+                            id: playerId,
+                            name: FBInstant.player.getName?.() ?? null,
+                            photo: FBInstant.player.getPhoto?.() ?? null,
+                            signature: signedInfo.getSignature(),
+                            locale: FBInstant.getLocale(),
+                            timestamp: Date.now()
+                        };
+                    })();
+                `); if (credentials?.id && credentials?.signature) {
+                    fbCredentials = credentials;
+                    console.log("Credentials stored globally:", fbCredentials);
+                    clearInterval(interval);
+                    await win.loadFile("ui.html");
+                    break;
+                }
+            } catch (err) { console.log("Waiting for credentials:", err.message); }
+        }
+    }, 3000);
+}
+
+// Connect to WebSocket
+function connect(sender) {
+    socket = new WebSocket("wss://chess.game8.io/ws/gameServer", { headers: { "Origin": "null" } });
+    socket.on("open", function () {
+        let login = loginFbSignature2();
+        socket.send(login);
+        sender.send("websocket", "Connected to WebSocket\n");
+        setInterval(function() { socket.send(keepAlive()); }, KEEP_ALIVE_INTERVAL);
+    });
+    socket.on("message", function (data) {
+        parseMessage(data);
+        //sender.send("websocket", parseMessage(data) + "\n");
+        sender.send("websocket", Buffer.from(data).toString("hex") + "\n");
+    });
+    socket.on("error", function (error) { sender.send("websocket", "WebSocket error\n"); });
+    socket.on("close", function () { sender.send("websocket", "WebSocket connection closed.\n"); }); return socket;
+}
 
 // Convert string to Int8Array
 function asciiTOint8(str) {
@@ -153,13 +210,6 @@ function encode(buf) {
     } return result;
 }
 
-// Keep alive message
-function keepAlive() {
-    let msg = { data: [], length: 0 };
-    writeShort(OPCODES["PING"], msg);
-    return encode(msg);
-}
-
 // Read 1 byte (signed)
 function readByte(buf) {
     let value = buf.data[buf.offset++];
@@ -235,6 +285,47 @@ function readStringArray(buf) {
     return result;
 }
 
+// Create message with opcode
+function createMessage(opcode, writePayload = () => {}) {
+    const msg = { data: [], length: 0 };
+    writeShort(OPCODES[opcode], msg);
+    writePayload(msg);
+    return encode(msg);
+}
+
+// Login FB signature
+function loginFbSignature2() {
+    return createMessage("LOGIN_FB_SIGNATURE2", msg => {
+        writeAscii(fbCredentials.id, msg);
+        writeLongAscii(fbCredentials.signature, msg);
+        writeString(fbCredentials.name, msg);
+        writeAscii(fbCredentials.photo, msg);
+        writeAscii(fbCredentials.locale, msg);
+        writeAscii("FBIG_CHESS", msg);
+        writeAscii("5.0.1", msg);
+        writeAscii(null, msg);
+        writeAscii("chess", msg);
+        writeByte(1, msg);
+        writeLong(0, msg);
+        writeAscii(null, msg);
+        writeByte(1, msg);
+    });
+}
+
+// Keep alive message
+function keepAlive() {
+    return createMessage("PING");
+}
+
+// Encode move
+function encodeMove(src, dst, prom) {
+    return createMessage("PLAY", msg => {
+        writeByte(src, msg);
+        writeByte(dst, msg);
+        if (prom) writeByte(prom, msg);
+    });
+}
+
 // Parse web socket message
 function parseMessage(data) {
     let response = {
@@ -248,83 +339,10 @@ function parseMessage(data) {
 
     const opcode = readShort(buf);
 
-    console.log(opcode);
-    console.log(buf.offset);
+    //console.log(opcode);
+    //console.log(buf.offset);
     
     return response;
-}
-
-// Login FB signature
-function loginFbSignature2() {
-    let token = { data: [], length: 0 };
-    writeShort(OPCODES["LOGIN_FB_SIGNATURE2"], token);
-    writeAscii(fbCredentials.id, token);
-    writeLongAscii(fbCredentials.signature, token);
-    writeString(fbCredentials.name, token);
-    writeAscii(fbCredentials.photo, token);
-    writeAscii(fbCredentials.locale, token);
-    writeAscii("FBIG_CHESS", token);
-    writeAscii("5.0.1", token);
-    writeAscii(null, token);
-    writeAscii("chess", token);
-    writeByte(1, token);
-    writeLong(0, token);
-    writeAscii(null, token);
-    writeByte(1, token);
-    return encode(token);
-}
-
-// Login via facebook instant games
-function fbLogin(win) {
-    win.loadURL("https://www.facebook.com/gaming/play/194060244713436/");
-    const interval = setInterval(async () => {
-        const frames = win.webContents.mainFrame.framesInSubtree;
-        for (const frame of frames) {
-            if (!frame.url.includes("194060244713436")) continue;
-            try {
-                const credentials = await frame.executeJavaScript(`
-                    (async () => {
-                        if (!window.FBInstant) { throw new Error("FBInstant is unavailable"); }
-                        const signedInfo = await FBInstant.player.getSignedPlayerInfoAsync("hello");
-                        let playerId = FBInstant.player.getID();
-                        if (playerId == null || playerId === "") playerId = signedInfo.getPlayerID();
-                        return {
-                            id: playerId,
-                            name: FBInstant.player.getName?.() ?? null,
-                            photo: FBInstant.player.getPhoto?.() ?? null,
-                            signature: signedInfo.getSignature(),
-                            locale: FBInstant.getLocale(),
-                            timestamp: Date.now()
-                        };
-                    })();
-                `); if (credentials?.id && credentials?.signature) {
-                    fbCredentials = credentials;
-                    console.log("Credentials stored globally:", fbCredentials);
-                    clearInterval(interval);
-                    await win.loadFile("ui.html");
-                    break;
-                }
-            } catch (err) { console.log("Waiting for credentials:", err.message); }
-        }
-    }, 3000);
-}
-
-// Connect to WebSocket
-function connect(sender) {
-    socket = new WebSocket("wss://chess.game8.io/ws/gameServer", { headers: { "Origin": "null" } });
-    socket.on("open", function () {
-        let login = loginFbSignature2();
-        socket.send(Buffer.from(login, "hex"));
-        sender.send("websocket", "Connected to WebSocket\n");
-        setInterval(function() { socket.send(keepAlive()); }, KEEP_ALIVE_INTERVAL);
-    });
-    socket.on("message", function (data) {
-        parseMessage(data);
-        //sender.send("websocket", JSON.stringify(parseMessage(data)) + "\n");
-        sender.send("websocket", Buffer.from(data).toString("hex") + "\n");
-    });
-    socket.on("error", function (error) { sender.send("websocket", "WebSocket error\n"); });
-    socket.on("close", function () { sender.send("websocket", "WebSocket connection closed.\n"); }); return socket;
 }
 
 /*******************************\
@@ -361,20 +379,26 @@ function createWindow() {
     win.on("close", () => { if (socket) socket.close(); });
 } app.whenReady().then(createWindow);
 app.on("quit", () => { if (socket) socket.close(); });
-ipcMain.on("gui", (event, command) => {
-    console.log(`GUI: ${command}`)
-    if (command == "connect") {
+ipcMain.on("gui", (event, msg) => {
+    if (msg.command == "connect") {
         initEngine(event.sender);
         connect(event.sender);
-    } else if (command == "disconnect") {
+    } else if (msg.command == "disconnect") {
         if (socket) socket.close();
         if (engine) engine.kill();
-    } else socket.send(Buffer.from(command, "hex"));
-});
-
-ipcMain.on("uci", (event, command) => {
-    console.log(`UCI: ${command}`)
-    engine.stdin.write(command + "\n");
+    } else if (msg.command == "move") {
+        let src = msg.params.src;
+        let dst = msg.params.dst;
+        let prom = msg.params.prom;
+        let move = encodeMove(src, dst, prom); console.log("sending move", move);
+        socket.send(move);
+    } else if (msg.command == "hex") {
+        console.log("tries to send", msg);
+        socket.send(Buffer.from(msg.params.data, "hex"));
+    }
+}); ipcMain.on("uci", (event, msg) => {
+    console.log(`UCI: ${msg}`)
+    engine.stdin.write(msg + "\n");
 });
 
 

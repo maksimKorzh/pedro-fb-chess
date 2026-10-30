@@ -15,40 +15,34 @@ const coords = [
     "a8", "b8", "c8", "d8", "e8", "f8", "g8", "h8",
 ];
 
+function createCommand(command, params = {}) { return { command, params }; }
+
 function hexToAscii(hex) {
   return hex.match(/.{1,2}/g)
     .map(byte => String.fromCharCode(parseInt(byte, 16)))
     .join('');
 }
 
+function sendMove(src, dst, prom) {
+    let msg = createCommand("move", {src, dst, prom});
+    window.fbchess.sendGUICommand(msg);
+}
+
 // Send user move
 function onDrop (src, dst) {
     if (src != dst) {
         let prom = 0;
-        
         var move = game.move({
             from: src,
             to: dst,
             promotion: 'q' // NOTE: always promote to a queen for example simplicity
-        });
-        
-        // Promotion
-        try { if (move.flags.includes("p")) prom = 1; }
-        catch (e) {}
-
-        // Illegal move
-        if (move === null) return 'snapback'
+        }); try { if (move.flags.includes("p")) prom = 1; }
+        catch (e) {}; if (move === null) return 'snapback'
         else {
-            src = coords.indexOf(src).toString(16).padStart(2, '0');
-            dst = coords.indexOf(dst).toString(16).padStart(2, '0');
-            let command = "01f6" + src + dst;
-            
-            // promotion
-            if (prom) command += "01";
-            
-            window.fbchess.sendGUICommand(command);
+            src = coords.indexOf(src);
+            dst = coords.indexOf(dst);            
+            sendMove(src, dst, prom);
         }
-
     }
 }
 
@@ -202,22 +196,19 @@ window.fbchess.onWebSocketMsg((data) => {
 // Engine move
 window.fbchess.onEngineMsg((data) => {
     let prom = 0;
-    let src = data[0] + data[1];
-    let dst = data[2] + data[3];
+    let msg = JSON.parse(data);
+    let src = msg.src;
+    let dst = msg.dst;
+    console.log(msg);
     var move = game.move({
         from: src,
         to: dst,
         promotion: 'q'
     }); try { if (move.flags.includes("p")) prom = 1; }
     catch (e) {}
-    src = coords.indexOf(src).toString(16).padStart(2, '0');
-    dst = coords.indexOf(dst).toString(16).padStart(2, '0');
-    
-    // This should be in FBChess.js
-    let command = "01f6" + src + dst;
-    if (prom) command += "01";
-    console.log(command);
-    window.fbchess.sendGUICommand(command);
+    src = coords.indexOf(src);
+    dst = coords.indexOf(dst);
+    sendMove(src, dst, prom);
 });
 
 input.addEventListener("keydown", (e) => {
@@ -240,7 +231,13 @@ input.addEventListener("keydown", (e) => {
          ==============================
         \******************************/
         
-        if (cmd == "game") {
+        if (cmd == "connect") {
+            let msg = createCommand("connect");
+            window.fbchess.sendGUICommand(msg);
+        } if (cmd == "disconnect") {
+            let msg = createCommand("disconnect");
+            window.fbchess.sendGUICommand(msg);
+        } else if (cmd == "game") {
             let createGame = [
                 // Enter place
                 "01910b4c6f6262792e6368657373000000056368657373",
@@ -250,20 +247,18 @@ input.addEventListener("keydown", (e) => {
 
                 // match 15 main time, 60s per move
                 "019502030d6d617463684475726174696f6e0002003100350c7475726e4475726174696f6e0002003900300b6163634475726174696f6e0001003000"
-            ]; for (let msg of createGame) window.fbchess.sendGUICommand(msg);
+            ]; for (let msg of createGame) window.fbchess.sendGUICommand(createCommand("hex", {data: msg}));
         } else if (cmd == "start") {
-            window.fbchess.sendGUICommand("012b");
+            window.fbchess.sendGUICommand(createCommand("hex", {data: "012b"}));
         } else if (cmd == "resign") {
-            window.fbchess.sendGUICommand("0216");
+            window.fbchess.sendGUICommand(createCommand("hex", {data: "0216"}));
         } else {
             // Send user move
-            src = coords.indexOf(cmd[0] + cmd[1]).toString(16).padStart(2, '0');
-            dst = coords.indexOf(cmd[2] + cmd[3]).toString(16).padStart(2, '0');
-            if (src != "-1" && dst != "-1") {
-                let move = "01f6" + src + dst;
-                console.log("play move", move);
-                window.fbchess.sendGUICommand(move);
-            } else window.fbchess.sendGUICommand(cmd);
+            let src = coords.indexOf(cmd[0] + cmd[1]);
+            let dst = coords.indexOf(cmd[2] + cmd[3]);
+            let prom = (cmd[4] == undefined) ? 0 : 1;
+            if (src != "-1" && dst != "-1") sendMove(src, dst, prom);
+            else window.fbchess.sendGUICommand(cmd);
         }
         
         // Clear command, scroll terminal
