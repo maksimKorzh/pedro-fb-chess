@@ -13,7 +13,7 @@ const OPCODES = {
     "LOGIN_FB_SIGNATURE2": 616
 };
 
-/* DEBUG
+// DEBUG
 fbCredentials = {
     id: '29468922622700128',
     locale: 'en_GB',
@@ -21,7 +21,7 @@ fbCredentials = {
     photo: null,
     signature: 'i-XwFMGTd1e3LmhELauJBpKKpQLqwClPvKlGUB09p4U.eyJhbGdvcml0aG0iOiJITUFDLVNIQTI1NiIsImlzc3VlZF9hdCI6MTc5MzM2OTE4NiwicGxheWVyX2lkIjoiMjk0Njg5MjI2MjI3MDAxMjgiLCJyZXF1ZXN0X3BheWxvYWQiOiJoZWxsbyJ9',
     timestamp: 1793369186350
-};*/
+};
 
 /*******************************\
  ===============================
@@ -232,21 +232,26 @@ function createWindow() {
         }
     ]; const menu = Menu.buildFromTemplate(template);
     Menu.setApplicationMenu(menu);
-    fbLogin(win);
-    //win.loadFile("ui.html"); // DEBUG
+    //fbLogin(win);
+    win.loadFile("ui.html"); // DEBUG
     win.maximize();
     win.on("close", () => { if (socket) socket.close(); });
 } app.whenReady().then(createWindow);
 app.on("quit", () => { if (socket) socket.close(); });
-ipcMain.on("command", (event, command) => {
+ipcMain.on("gui", (event, command) => {
+    console.log(`GUI: ${command}`)
     if (command == "connect") {
         initEngine(event.sender);
         connect(event.sender);
     } else if (command == "disconnect") {
         if (socket) socket.close();
         if (engine) engine.kill();
-    } else if (command.includes("uci:")) {
-        command = command.split("uci:")[1];
-        engine.stdin.write(command + "\n");
     } else socket.send(Buffer.from(command, "hex"));
 });
+
+ipcMain.on("uci", (event, command) => {
+    console.log(`UCI: ${command}`)
+    engine.stdin.write(command + "\n");
+});
+
+

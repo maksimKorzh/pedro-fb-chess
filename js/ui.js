@@ -46,7 +46,7 @@ function onDrop (src, dst) {
             // promotion
             if (prom) command += "01";
             
-            window.fbchess.sendCommand(command);
+            window.fbchess.sendGUICommand(command);
         }
 
     }
@@ -146,12 +146,12 @@ window.fbchess.onData((data) => {
     // Set player status
     else if (data.startsWith("01a5")) {
         print("Opponent is ready, accepting match...\n");
-        window.fbchess.sendCommand("012b");
+        window.fbchess.sendGUICommand("012b");
     }
         
     // Game started
     else if (data.startsWith("01a1")) {
-        window.fbchess.sendCommand("data", "uci:ucinewgame");
+        window.fbchess.sendGUICommand("data", "uci:ucinewgame");
         board.position("start");
         game = new Chess();
         board.flip((userSide == 1 ? "black" : "white"));
@@ -224,7 +224,7 @@ window.fbchess.onData((data) => {
         if (prom) command += "01";    
         
         // Send engine move
-        window.fbchess.sendCommand(command);
+        window.fbchess.sendGUICommand(command);
     }
 });
 
@@ -258,17 +258,11 @@ input.addEventListener("keydown", (e) => {
 
                 // match 15 main time, 60s per move
                 "019502030d6d617463684475726174696f6e0002003100350c7475726e4475726174696f6e0002003900300b6163634475726174696f6e0001003000"
-            ]; for (let msg of createGame) window.fbchess.sendCommand(msg);
+            ]; for (let msg of createGame) window.fbchess.sendGUICommand(msg);
         } else if (cmd == "start") {
-            window.fbchess.sendCommand("012b");
+            window.fbchess.sendGUICommand("012b");
         } else if (cmd == "resign") {
-            window.fbchess.sendCommand("0216");
-        } else if (cmd == "move") {
-            // Sync engine
-            window.fbchess.sendCommand(`uci:position fen '${game.fen()}'`);
-            
-            // Make best move
-            window.fbchess.sendCommand("uci:go time 1");
+            window.fbchess.sendGUICommand("0216");
         } else {
             // Send user move
             src = coords.indexOf(cmd[0] + cmd[1]).toString(16).padStart(2, '0');
@@ -276,8 +270,8 @@ input.addEventListener("keydown", (e) => {
             if (src != "-1" && dst != "-1") {
                 let move = "01f6" + src + dst;
                 console.log("play move", move);
-                window.fbchess.sendCommand(move);
-            } else window.fbchess.sendCommand(cmd);
+                window.fbchess.sendGUICommand(move);
+            } else window.fbchess.sendGUICommand(cmd);
         }
         
         // Clear command, scroll terminal
@@ -289,9 +283,6 @@ input.addEventListener("keydown", (e) => {
 
 // Stockfish button
 document.getElementById("stockfish").addEventListener("click", function() {
-    // Sync engine
-    window.fbchess.sendCommand(`uci:position fen '${game.fen()}'`);
-    
-    // Make best move
-    window.fbchess.sendCommand("uci:go time 1");
+    window.fbchess.sendUCICommand(`position fen '${game.fen()}'`);
+    window.fbchess.sendUCICommand("go time 1");
 });
