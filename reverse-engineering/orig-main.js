@@ -747,7 +747,7 @@ function(e) {
         e.removeData(this, "suppress." + t.type)
     }
     ;
-    var r = t.fixHooks.touchstart = t.fixHooks.touchmove = t.fixHooks.touchend = t.fixHooks.touchcancel = {
+    var r = /*t.fixHooks.touchstart = t.fixHooks.touchmove = t.fixHooks.touchend = t.fixHooks.touchcancel =*/ {
         props: "clientX clientY pageX pageY screenX screenY".split(" "),
         filter: function(t, n) {
             if (n) {
@@ -22404,16 +22404,16 @@ ftl.game.enqueueTween = function(e) {
     t.activeTweenCount <= 0 && ftl.game.playNextTween(t))
 }
 ,
-ftl.Loader.manifest.push({
-    src: wcImagePath + "/hand_offer.png",
+/*ftl.Loader.manifest.push({
+    src: "",//wcImagePath + "/hand_offer.png",
     id: "hand_offer"
 }),
 ftl.Loader.manifest.push({
-    src: wcImagePath + "/grade1.png",
+    src: "",//wcImagePath + "/grade1.png",
     id: "grade1"
 }),
 ftl.Loader.manifest.push({
-    src: wcImagePath + "/grade4.png",
+    src: ""//wcImagePath + "/grade4.png",
     id: "grade4"
 }),
 ftl.Loader.manifest.push({
@@ -22455,7 +22455,7 @@ ftl.Loader.manifest.push({
 ftl.Loader.manifest.push({
     src: wcImagePath + "/emo_anim.png",
     id: "emo_anim"
-}),
+}),*/
 window.ftl = window.ftl || {},
 function() {
     function e(e, t, n, a, i, r, o, s, l, c) {
@@ -22630,7 +22630,7 @@ function() {
     createjs.extend(e, createjs.Sprite);
     ftl.EmoAnim = createjs.promote(e, "Sprite")
 }(),
-window.ftl.game = window.ftl.game || {},
+/*window.ftl.game = window.ftl.game || {},
 ftl.Loader.manifest.push({
     src: wcImagePath + "/btn_round_wood.png",
     id: "btn_round_wood"
@@ -22666,7 +22666,7 @@ ftl.Loader.manifest.push({
 ftl.Loader.initializers.push(function() {
     ftl.Player.prototype.w = 144,
     ftl.Player.prototype.h = 144
-}),
+}),*/
 function() {
     function e(e) {
         this.Container_constructor(),
@@ -22925,11 +22925,11 @@ function() {
     ,
     ftl.Player = createjs.promote(e, "Container")
 }(),
-window.ftl = window.ftl || {},
+/*window.ftl = window.ftl || {},
 ftl.Loader.manifest.push({
     src: wcImagePath + "/light.png",
     id: "light"
-}),
+}),*/
 function() {
     function e(e, t) {
         this.Container_constructor(),
@@ -24436,7 +24436,7 @@ function processPendingTask() {
 }
 function reconnect() {
     window.lastReconnectTime = Date.now();
-    var e = $("#disconnectedMessage a");
+    /*var e = $("#disconnectedMessage a");
     e.length > 0 && e.css({
         "pointer-events": "none",
         opacity: "0.5"
@@ -24445,7 +24445,7 @@ function reconnect() {
         placePath: breadscrumb.path,
         placeType: breadscrumb.type,
         placeMode: window.currentClientMode
-    },
+    },*/
     FBInstant.player.getSignedPlayerInfoAsync("hello").then(function(e) {
         var t = {};
         t.id = FBInstant.player.getID(),
