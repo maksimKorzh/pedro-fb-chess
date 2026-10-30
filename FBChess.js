@@ -1,3 +1,6 @@
+// Temp
+DEBUG = true;
+
 // Packeges
 const { app, BrowserWindow, ipcMain, Menu } = require("electron");
 const { spawn } = require('child_process');
@@ -13,15 +16,16 @@ const OPCODES = {
     "LOGIN_FB_SIGNATURE2": 616
 };
 
-// DEBUG
-fbCredentials = {
-    id: '29468922622700128',
-    locale: 'en_GB',
-    name: null,
-    photo: null,
-    signature: 'i-XwFMGTd1e3LmhELauJBpKKpQLqwClPvKlGUB09p4U.eyJhbGdvcml0aG0iOiJITUFDLVNIQTI1NiIsImlzc3VlZF9hdCI6MTc5MzM2OTE4NiwicGxheWVyX2lkIjoiMjk0Njg5MjI2MjI3MDAxMjgiLCJyZXF1ZXN0X3BheWxvYWQiOiJoZWxsbyJ9',
-    timestamp: 1793369186350
-};
+if (DEBUG) {
+    fbCredentials = {
+        id: '29468922622700128',
+        locale: 'en_GB',
+        name: null,
+        photo: null,
+        signature: 'i-XwFMGTd1e3LmhELauJBpKKpQLqwClPvKlGUB09p4U.eyJhbGdvcml0aG0iOiJITUFDLVNIQTI1NiIsImlzc3VlZF9hdCI6MTc5MzM2OTE4NiwicGxheWVyX2lkIjoiMjk0Njg5MjI2MjI3MDAxMjgiLCJyZXF1ZXN0X3BheWxvYWQiOiJoZWxsbyJ9',
+        timestamp: 1793369186350
+    };
+}
 
 /*******************************\
  ===============================
@@ -135,6 +139,16 @@ function writeString(str, buf) {
     buf.length += 2 * str.length;
 }
 
+// Encode message
+function encode(buf) {
+    const result = new Int8Array(buf.length);
+    let offset = 0;
+    for (const chunk of buf.data) {
+        result.set(chunk, offset);
+        offset += chunk.length;
+    } return result;
+}
+
 // Login FB signature
 function loginFbSignature2() {
     let token = { data: [], length: 0 };
@@ -152,7 +166,7 @@ function loginFbSignature2() {
     writeLong(0, token);
     writeAscii(null, token);
     writeByte(1, token);
-    return Buffer.concat(token.data.map(chunk => Buffer.from(chunk)));
+    return encode(token);
 }
 
 // Login via facebook instant games
@@ -232,8 +246,8 @@ function createWindow() {
         }
     ]; const menu = Menu.buildFromTemplate(template);
     Menu.setApplicationMenu(menu);
-    //fbLogin(win);
-    win.loadFile("ui.html"); // DEBUG
+    if (DEBUG) win.loadFile("ui.html");
+    else fbLogin(win);
     win.maximize();
     win.on("close", () => { if (socket) socket.close(); });
 } app.whenReady().then(createWindow);
