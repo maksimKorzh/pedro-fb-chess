@@ -11,8 +11,12 @@ var socket = null;
 var fbCredentials = null;
 var engine = null;
 
-// WebSocket opcodes
+// App constants
+const KEEP_ALIVE_INTERVAL = 7500;
+
 const OPCODES = {
+    "PING": 300,
+    "PONG": 301,
     "LOGIN_FB_SIGNATURE2": 616
 };
 
@@ -42,7 +46,7 @@ function initEngine(sender) {
         let response = data.toString();
         if (response.includes("bestmove")) {
             let move = response.split("bestmove ")[1].split(" ")[0];
-            sender.send("data", "uci:" + move + "\n");
+            sender.send("engine", move + "\n");
         }
         console.log("ENGINGE:", response);
     }); engine.on("exit", (code, signal) => { console.error("engine: exited"); });
@@ -149,6 +153,13 @@ function encode(buf) {
     } return result;
 }
 
+// Keep alive message
+function keepAlive() {
+    let msg = { data: [], length: 0 };
+    writeShort(OPCODES["PING"], msg);
+    return encode(msg);
+}
+
 // Login FB signature
 function loginFbSignature2() {
     let token = { data: [], length: 0 };
@@ -210,12 +221,14 @@ function connect(sender) {
     socket.on("open", function () {
         let login = loginFbSignature2();
         socket.send(Buffer.from(login, "hex"));
-        sender.send("data", "Connected to WebSocket\n");
-        setInterval(function() { socket.send(Buffer.from("012d", "hex")); }, 10000);
+        sender.send("websocket", "Connected to WebSocket\n");
+        setInterval(function() { socket.send(keepAlive()); }, KEEP_ALIVE_INTERVAL);
     });
-    socket.on("message", function (data) { sender.send("data", Buffer.from(data).toString("hex") + "\n"); });
-    socket.on("error", function (error) { sender.send("data", "WebSocket error\n"); });
-    socket.on("close", function () { sender.send("data", "WebSocket connection closed.\n"); }); return socket;
+    socket.on("message", function (data) {
+        sender.send("websocket", Buffer.from(data).toString("hex") + "\n");
+    });
+    socket.on("error", function (error) { sender.send("websocket", "WebSocket error\n"); });
+    socket.on("close", function () { sender.send("websocket", "WebSocket connection closed.\n"); }); return socket;
 }
 
 /*******************************\

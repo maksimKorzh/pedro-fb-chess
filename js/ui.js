@@ -122,7 +122,7 @@ function decodeClock(hex) {
     return `${player}: ${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
 }
 
-window.fbchess.onData((data) => {
+window.fbchess.onWebSocketMsg((data) => {
     if (data.includes("WebSocket")) print(data);
     console.log(data.replaceAll(" ", ""), hexToAscii(data.replaceAll(" ", "")));
     
@@ -197,35 +197,27 @@ window.fbchess.onData((data) => {
         let time = decodeClock(data);
         if (!time.includes("0:00") && !time.includes("15:00")) print(time + "\n");
     }
-    
-    // Engine move
-    else if (data.includes("uci:")) {
-        data = data.split("uci:")[1];
-        let prom = 0;
-        let src = data[0] + data[1];
-        let dst = data[2] + data[3];
-        console.log("best move:", src+dst)
-        
-        var move = game.move({
-            from: src,
-            to: dst,
-            promotion: 'q'
-        });
-        
-        // Promotion
-        try { if (move.flags.includes("p")) prom = 1; }
-        catch (e) {}
+});
 
-        src = coords.indexOf(src).toString(16).padStart(2, '0');
-        dst = coords.indexOf(dst).toString(16).padStart(2, '0');
-        let command = "01f6" + src + dst;
-        
-        // promotion
-        if (prom) command += "01";    
-        
-        // Send engine move
-        window.fbchess.sendGUICommand(command);
-    }
+// Engine move
+window.fbchess.onEngineMsg((data) => {
+    let prom = 0;
+    let src = data[0] + data[1];
+    let dst = data[2] + data[3];
+    var move = game.move({
+        from: src,
+        to: dst,
+        promotion: 'q'
+    }); try { if (move.flags.includes("p")) prom = 1; }
+    catch (e) {}
+    src = coords.indexOf(src).toString(16).padStart(2, '0');
+    dst = coords.indexOf(dst).toString(16).padStart(2, '0');
+    
+    // This should be in FBChess.js
+    let command = "01f6" + src + dst;
+    if (prom) command += "01";
+    console.log(command);
+    window.fbchess.sendGUICommand(command);
 });
 
 input.addEventListener("keydown", (e) => {
