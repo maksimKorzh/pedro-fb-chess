@@ -151,7 +151,7 @@ window.fbchess.onData((data) => {
         
     // Game started
     else if (data.startsWith("01a1")) {
-        window.fbchess.sendGUICommand("data", "uci:ucinewgame");
+        window.fbchess.sendGUICommand("data", "ucinewgame");
         board.position("start");
         game = new Chess();
         board.flip((userSide == 1 ? "black" : "white"));
