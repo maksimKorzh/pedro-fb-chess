@@ -8,7 +8,12 @@ var socket = null;
 var fbCredentials = null;
 var engine = null;
 
-// DEBUG
+// WebSocket opcodes
+const OPCODES = {
+    "LOGIN_FB_SIGNATURE2": 616
+};
+
+/* DEBUG
 fbCredentials = {
     id: '29468922622700128',
     locale: 'en_GB',
@@ -16,7 +21,7 @@ fbCredentials = {
     photo: null,
     signature: 'i-XwFMGTd1e3LmhELauJBpKKpQLqwClPvKlGUB09p4U.eyJhbGdvcml0aG0iOiJITUFDLVNIQTI1NiIsImlzc3VlZF9hdCI6MTc5MzM2OTE4NiwicGxheWVyX2lkIjoiMjk0Njg5MjI2MjI3MDAxMjgiLCJyZXF1ZXN0X3BheWxvYWQiOiJoZWxsbyJ9',
     timestamp: 1793369186350
-};
+};*/
 
 /*******************************\
  ===============================
@@ -49,7 +54,106 @@ function initEngine(sender) {
  ===============================
 \*******************************/
 
-//
+// Convert string to Int8Array
+function asciiTOint8(str) {
+    const result = new Int8Array(str.length);
+    for (let i = 0; i < str.length; i++) result[i] = str.charCodeAt(i);
+    return result;
+}
+
+// Convert string to 16-bit character bytes
+function strTOint8(str) {
+    const result = new Int8Array(2 * str.length);
+    for (let i = 0; i < str.length; i++) {
+        const charCode = str.charCodeAt(i);
+        result[2 * i] = charCode >> 8;
+        result[2 * i + 1] = charCode;
+    } return result;
+}
+
+// Write Byte
+function writeByte(val, buf) {
+    buf.data.push(new Int8Array([val]));
+    buf.length++;
+}
+
+// Write 16-bit integer (2 bytes)
+function writeShort(val, buf) {
+    buf.data.push(new Int8Array([val >> 8, val]));
+    buf.length += 2;
+}
+
+// Write 32-bit integer (4 bytes)
+function writeInt(val, buf) {
+    buf.data.push(new Int8Array([val >> 24, val >> 16, val >> 8, val]));
+    buf.length += 4;
+}
+
+// Write 64-bit integer (8 bytes)
+function writeLong(val, buf) {
+    let negative = false;
+    if (val < 0) {
+        val = 0x8000000000000000n + BigInt(val) + 1n;
+        negative = true;
+    } else val = BigInt(val);
+    const bytes = new Int8Array([
+        Number((val >> 56n) & 0xFFn),
+        Number((val >> 48n) & 0xFFn),
+        Number((val >> 40n) & 0xFFn),
+        Number((val >> 32n) & 0xFFn),
+        Number((val >> 24n) & 0xFFn),
+        Number((val >> 16n) & 0xFFn),
+        Number((val >> 8n) & 0xFFn),
+        Number(val & 0xFFn)
+    ]); if (negative) bytes[0] |= 128;
+    buf.data.push(bytes);
+    buf.length += 8;
+}
+    
+// Write ASCII
+function writeAscii(str, buf) {
+    if (str == null) str = "";
+    if (str.length > 255) str = str.substring(0, 255);
+    writeByte(str.length, buf);
+    buf.data.push(asciiTOint8(str));
+    buf.length += str.length;
+}
+
+// Write long ASCII
+function writeLongAscii(str, buf) {
+    if (str == null) str = "";
+    writeInt(str.length, buf);
+    buf.data.push(asciiTOint8(str));
+    buf.length += str.length;
+}
+
+// Write string (2-byte length prefix)
+function writeString(str, buf) {
+    if (str == null) str = "";
+    writeShort(str.length, buf);
+    buf.data.push(strTOint8(str));
+    buf.length += 2 * str.length;
+}
+
+// Login FB signature
+function loginFbSignature2() {
+    let token = { data: [], length: 0 };
+    writeShort(OPCODES["LOGIN_FB_SIGNATURE2"], token);
+    writeAscii(fbCredentials.id, token);
+    writeLongAscii(fbCredentials.signature, token);
+    writeString(fbCredentials.name, token);
+    writeAscii(fbCredentials.photo, token);
+    writeAscii(fbCredentials.locale, token);
+    writeAscii("FBIG_CHESS", token);
+    writeAscii("5.0.1", token);
+    writeAscii(null, token);
+    writeAscii("chess", token);
+    writeByte(1, token);
+    writeLong(0, token);
+    writeAscii(null, token);
+    writeByte(1, token);
+    return Buffer.concat(token.data.map(chunk => Buffer.from(chunk)));
+}
 
 // Login via facebook instant games
 function fbLogin(win) {
@@ -90,7 +194,7 @@ function fbLogin(win) {
 function connect(sender) {
     socket = new WebSocket("wss://chess.game8.io/ws/gameServer", { headers: { "Origin": "null" } });
     socket.on("open", function () {
-        let login = "0268113239343638393232363232373030313238000000bc486173685256385f4f6d576a4631594746796c6a58495277784f73416658385a5774464a7272767a4d6d772e65794a6862476476636d6c30614730694f694a49545546444c564e49515449314e694973496d6c7a6333566c5a463968644349364d5463354d7a45784d6a45354f437769634778686557567958326c6b496a6f694d6a6b304e6a67354d6a49324d6a49334d4441784d6a67694c434a795a5846315a584e305833426865577876595751694f694a6f5a57787362794a3900000005656e5f47420a464249475f434845535305352e302e31196c617374506f7075703d3d313739333130393036363637350a0563686573730100000000000000000001";
+        let login = loginFbSignature2();
         socket.send(Buffer.from(login, "hex"));
         sender.send("data", "Connected to WebSocket\n");
         setInterval(function() { socket.send(Buffer.from("012d", "hex")); }, 10000);
@@ -128,8 +232,8 @@ function createWindow() {
         }
     ]; const menu = Menu.buildFromTemplate(template);
     Menu.setApplicationMenu(menu);
-    //fbLogin(win);
-    win.loadFile("ui.html"); 
+    fbLogin(win);
+    //win.loadFile("ui.html"); // DEBUG
     win.maximize();
     win.on("close", () => { if (socket) socket.close(); });
 } app.whenReady().then(createWindow);
