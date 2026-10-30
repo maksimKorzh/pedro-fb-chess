@@ -15,8 +15,8 @@ var engine = null;
 const KEEP_ALIVE_INTERVAL = 7500;
 
 const OPCODES = {
-    "PING": 300,
-    "PONG": 301,
+    "PONG": 300,
+    "PING": 301,
     "LOGIN_FB_SIGNATURE2": 616
 };
 
@@ -160,6 +160,100 @@ function keepAlive() {
     return encode(msg);
 }
 
+// Read 1 byte (signed)
+function readByte(buf) {
+    let value = buf.data[buf.offset++];
+    if (value > 127) value -= 256;
+    return value;
+}
+
+// Read an Int8Array of specified length
+function readInt8Array(length, buf) {
+    const result = new Int8Array(length);
+
+    for (let i = 0; i < length; i++) {
+        result[i] = buf.data[buf.offset++];
+    }
+
+    return result;
+}
+
+// Read ASCII (1-byte length prefix)
+function readAscii(buf) {
+    let length = readByte(buf);
+    if (length < 0) length += 256;
+    return int8TOascii(readInt8Array(length, buf));
+}
+
+// Read long ASCII (4-byte length prefix)
+function readLongAscii(buf) {
+    const length = readInt(buf);
+    return int8TOascii(readInt8Array(length, buf));
+}
+
+// Read signed 16-bit integer (big-endian)
+function readShort(buf) {
+    let value = buf.data[buf.offset++];
+    value <<= 8;
+    value |= 255 & buf.data[buf.offset++];
+    if (value > 32767) value -= 65536;
+    return value;
+}
+
+// Read signed 32-bit integer (big-endian)
+function readInt(buf) {
+    let value = buf.data[buf.offset++]; value <<= 8;
+    value |= 255 & buf.data[buf.offset++]; value <<= 8;
+    value |= 255 & buf.data[buf.offset++]; value <<= 8;
+    value |= 255 & buf.data[buf.offset++]; return value;
+}
+
+// Read 64-bit integer (big-endian)
+function readLong(buf) {
+    let val = BigInt(buf.data[buf.offset++] & 255);
+    for (let i = 0; i < 7; i++) val = (value << 8n) | BigInt(buf.data[buf.offset++] & 255);
+    return BigInt.asIntN(64, val);
+}
+
+// Read string (2-byte length prefix, UTF-16)
+function readString(buf) {
+    const length = readShort(buf);
+    return int8TOstr(readInt8Array(2 * length, buf));
+}
+
+// Read byte array (2-byte length prefix)
+function readByteArray(buf) {
+    const length = readShort(buf);
+    return int8TObytes(readInt8Array(length, buf));
+}
+
+// Read array of strings (2-byte element count)
+function readStringArray(buf) {
+    const result = [];
+    const length = readShort(buf);
+    for (let i = 0; i < length; i++) result[i] = readString(buf);
+    return result;
+}
+
+// Parse web socket message
+function parseMessage(data) {
+    let response = {
+        "command": ""
+    };
+    
+    const buf = {
+        data: data,
+        offset: 0
+    };
+
+    const opcode = readShort(buf);
+
+    console.log(opcode);
+    console.log(buf.offset);
+    
+    return response;
+}
+
 // Login FB signature
 function loginFbSignature2() {
     let token = { data: [], length: 0 };
@@ -225,6 +319,8 @@ function connect(sender) {
         setInterval(function() { socket.send(keepAlive()); }, KEEP_ALIVE_INTERVAL);
     });
     socket.on("message", function (data) {
+        parseMessage(data);
+        //sender.send("websocket", JSON.stringify(parseMessage(data)) + "\n");
         sender.send("websocket", Buffer.from(data).toString("hex") + "\n");
     });
     socket.on("error", function (error) { sender.send("websocket", "WebSocket error\n"); });
