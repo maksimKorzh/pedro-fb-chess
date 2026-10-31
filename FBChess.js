@@ -16,8 +16,9 @@ const KEEP_ALIVE_INTERVAL = 7500;
 const OPCODES = {
     "PONG": 300,
     "PING": 301,
-    "MOVE": 529,
+    "GET_CURRENT_PATH": 430,
     "PLAY": 502,
+    "MOVE": 529,
     "LOGIN_FB_SIGNATURE2": 616
 };
 
@@ -111,9 +112,8 @@ function connect(sender) {
         setInterval(function() { socket.send(keepAlive()); }, KEEP_ALIVE_INTERVAL);
     });
     socket.on("message", function (data) {
-        parseMessage(data);
-        //sender.send("websocket", parseMessage(data) + "\n");
-        sender.send("websocket", Buffer.from(data).toString("hex") + "\n");
+        //sender.send("websocket", parseMessage(data)); // new interface
+        sender.send("websocket", Buffer.from(data).toString("hex") + "\n"); // legacy
     });
     socket.on("error", function (error) { sender.send("websocket", "WebSocket error\n"); });
     socket.on("close", function () { sender.send("websocket", "WebSocket connection closed.\n"); }); return socket;
@@ -210,6 +210,38 @@ function encode(buf) {
     } return result;
 }
 
+// Array of bytes into a string
+function bin2String(arr) {
+    let result = "";
+    for (let i = 0; i < arr.length; i++) result += String.fromCharCode(arr[i]);
+    return result;
+}
+
+// Uint8Array to ASCII
+function int8TOascii(arr) {
+    return bin2String(arr);
+}
+
+// Int8Array to string.
+function int8TOstr(arr) {
+    const chars = new Uint16Array(arr.length / 2);
+    for (let i = 0; i < chars.length; i++) {
+        let value = arr[2 * i] << 8;
+        value |= 255 & arr[2 * i + 1];
+        chars[i] = value;
+    } return bin2String(chars);
+}
+
+// Int8Array to array of signed bytes
+function int8TObytes(arr) {
+    const result = [];
+    for (let i = 0; i < arr.length; i++) {
+        let value = arr[i];
+        if (value > 127) value -= 256;
+        result[i] = value;
+    } return result;
+}
+
 // Read 1 byte (signed)
 function readByte(buf) {
     let value = buf.data[buf.offset++];
@@ -235,12 +267,6 @@ function readAscii(buf) {
     return int8TOascii(readInt8Array(length, buf));
 }
 
-// Read long ASCII (4-byte length prefix)
-function readLongAscii(buf) {
-    const length = readInt(buf);
-    return int8TOascii(readInt8Array(length, buf));
-}
-
 // Read signed 16-bit integer (big-endian)
 function readShort(buf) {
     let value = buf.data[buf.offset++];
@@ -258,11 +284,23 @@ function readInt(buf) {
     value |= 255 & buf.data[buf.offset++]; return value;
 }
 
-// Read 64-bit integer (big-endian)
+// Multiply by 2 to the power of the specified number.
+function lshift(value, bits) {
+    return value * Math.pow(2, bits);
+}
+
+// Read a 64-bit integer (8 bytes, big-endian).
 function readLong(buf) {
-    let val = BigInt(buf.data[buf.offset++] & 255);
-    for (let i = 0; i < 7; i++) val = (value << 8n) | BigInt(buf.data[buf.offset++] & 255);
-    return BigInt.asIntN(64, val);
+    let value = buf.data[buf.offset++];
+    value = lshift(value, 8);
+    value = lshift(value | (255 & buf.data[buf.offset++]), 8);
+    value = lshift(value | (255 & buf.data[buf.offset++]), 8);
+    value = lshift(value | (255 & buf.data[buf.offset++]), 8);
+    value = lshift(value + (255 & buf.data[buf.offset++]), 8);
+    value = lshift(value + (255 & buf.data[buf.offset++]), 8);
+    value = lshift(value + (255 & buf.data[buf.offset++]), 8);
+    value += 255 & buf.data[buf.offset++];
+    return value;
 }
 
 // Read string (2-byte length prefix, UTF-16)
@@ -304,7 +342,7 @@ function loginFbSignature2() {
         writeAscii("FBIG_CHESS", msg);
         writeAscii("5.0.1", msg);
         writeAscii(null, msg);
-        writeAscii("chess", msg);
+        writeAscii("chess", msg); // gameId
         writeByte(1, msg);
         writeLong(0, msg);
         writeAscii(null, msg);
@@ -326,23 +364,67 @@ function encodeMove(src, dst, prom) {
     });
 }
 
+// Get player location
+function getCurrentPath() {
+    return createMessage("GET_CURRENT_PATH", msg => {
+        writeAscii("chess", msg);
+    });
+}
+
 // Parse web socket message
 function parseMessage(data) {
-    let response = {
-        "command": ""
-    };
-    
-    const buf = {
-        data: data,
-        offset: 0
-    };
-
-    const opcode = readShort(buf);
-
-    //console.log(opcode);
-    //console.log(buf.offset);
-    
-    return response;
+    let response = { command: "", params: {} };
+    let buf = { data: data, offset: 0 };
+    let opcode = readShort(buf); readByte(buf); // offset
+    switch (opcode) {
+        case 300:
+            response.command = "PONG";
+            break;      
+        case 430:
+            response.command = "GET_CURRENTPATH";
+            response.params = {
+                "avatar": readAscii(buf),
+            }; break;
+        case 616:
+            response.command = "LOGIN_FB_SIGNATURE2";
+            response.params = {
+                "refresh": readString(buf),
+                "loginCookie": readAscii(buf),
+                "playerId": readLong(buf),
+                "playerNickName": readAscii(buf),
+                "playerFullName": readString(buf),
+                "gameProviderId": readLong(buf),
+                "providerNickName": readAscii(buf),
+                "providerFullName": readString(buf),
+                "activeTournaments": readByte(buf),
+                "cdnHost": readAscii(buf),
+                "unreadMail": readShort(buf),
+                "serverTimeoutOffset": readLong(buf) - Date.now(),
+                "bannerInterval": readShort(buf),
+                "rooms": [],
+                "bets": [],
+                "taxes": []
+            }; let roomCount = readByte(buf);
+            for (let i = 0; i < roomCount; i++) {
+                var room = {
+                    "id": readByte(buf),
+                    "name": readString(buf),
+                    "clientCount": readShort(buf),
+                    "tableCount": readShort(buf),
+                    "maxTable": Math.min(readShort(buf), 80),
+                    "currency": readByte(buf)
+                }; response.params.rooms.push(room);
+            }; let betCount = readByte(buf), bets = [];
+            for (let i = 0; i < betCount; i++) {
+                const bet = { id: i, value: readInt(buf) };
+                bets.push(bet);
+            } response.params.bets = bets;
+            let taxCount = readByte(buf); console.log("taxCount", taxCount)
+            for (let i = 0; i < taxCount; i++) response.params.taxes.push(readInt(buf) / 1e6);
+            response.params.zoneEntranceRate = readInt(buf) / 1e6;
+            response.params.shouldRefineProfile = (1 == readByte(buf));
+            break;
+    } return response;
 }
 
 /*******************************\
@@ -390,10 +472,13 @@ ipcMain.on("gui", (event, msg) => {
         let src = msg.params.src;
         let dst = msg.params.dst;
         let prom = msg.params.prom;
-        let move = encodeMove(src, dst, prom); console.log("sending move", move);
+        let move = encodeMove(src, dst, prom);
         socket.send(move);
+    } else if (msg.command == "path") {
+        let path = getCurrentPath();
+        socket.send(path);
     } else if (msg.command == "hex") {
-        console.log("tries to send", msg);
+        //console.log("tries to send", msg);
         socket.send(Buffer.from(msg.params.data, "hex"));
     }
 }); ipcMain.on("uci", (event, msg) => {

@@ -116,9 +116,17 @@ function decodeClock(hex) {
     return `${player}: ${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
 }
 
+
+/*window.fbchess.onWebSocketMsg((data) => {
+    console.log(data);
+    try { print( JSON.stringify(data, null, 4) + "\n" ); }
+    catch(e) { print(data) + "\n"; }
+});*/
+
 window.fbchess.onWebSocketMsg((data) => {
     if (data.includes("WebSocket")) print(data);
     console.log(data.replaceAll(" ", ""), hexToAscii(data.replaceAll(" ", "")));
+
     
     // Update move on board
     if (data.startsWith("0211")) {
@@ -237,6 +245,9 @@ input.addEventListener("keydown", (e) => {
         } if (cmd == "disconnect") {
             let msg = createCommand("disconnect");
             window.fbchess.sendGUICommand(msg);
+        } else if (cmd == "path") {
+            let msg = createCommand("path");
+            window.fbchess.sendGUICommand(msg);
         } else if (cmd == "game") {
             let createGame = [
                 // Enter place
@@ -252,8 +263,7 @@ input.addEventListener("keydown", (e) => {
             window.fbchess.sendGUICommand(createCommand("hex", {data: "012b"}));
         } else if (cmd == "resign") {
             window.fbchess.sendGUICommand(createCommand("hex", {data: "0216"}));
-        } else {
-            // Send user move
+        } else { // Send user move
             let src = coords.indexOf(cmd[0] + cmd[1]);
             let dst = coords.indexOf(cmd[2] + cmd[3]);
             let prom = (cmd[4] == undefined) ? 0 : 1;
