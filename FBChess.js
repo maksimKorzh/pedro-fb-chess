@@ -1,5 +1,5 @@
 // Temp
-DEBUG = true;
+DEBUG = false;
 
 // Packeges
 const { app, BrowserWindow, ipcMain, Menu } = require("electron");
@@ -112,7 +112,7 @@ function connect(sender) {
         setInterval(function() { socket.send(keepAlive()); }, KEEP_ALIVE_INTERVAL);
     });
     socket.on("message", function (data) {
-        //sender.send("websocket", parseMessage(data)); // new interface
+        if (DEBUG) sender.send("websocket", parseMessage(data)); // new interface
         sender.send("websocket", Buffer.from(data).toString("hex") + "\n"); // legacy
     });
     socket.on("error", function (error) { sender.send("websocket", "WebSocket error\n"); });
@@ -373,18 +373,38 @@ function getCurrentPath() {
 
 // Parse web socket message
 function parseMessage(data) {
-    let response = { command: "", params: {} };
-    let buf = { data: data, offset: 0 };
+    let response = { "command": "", "params": {} };
+    let buf = { "data": data, "offset": 0 };
     let opcode = readShort(buf); readByte(buf); // offset
     switch (opcode) {
-        case 300:
-            response.command = "PONG";
-            break;      
+        case 300: response.command = "PONG"; break;
+        case 424: response.command = "SHOW_LUCKY_WHEEL"; break;
         case 430:
-            response.command = "GET_CURRENTPATH";
-            response.params = {
-                "avatar": readAscii(buf),
-            }; break;
+            response.command = "GET_CURRENT_PATH";
+            response.params = { "places": [] };
+            let count = readByte(buf);
+            let path = {};
+            for (let i = 0; i < count; i++) {
+                path = {
+                    "roomType": readAscii(buf).toLowerCase(),
+                    "roomId": readAscii(buf),
+                    "roomName": readString(buf),
+                }; response.params.places.push(path);
+            } response.params.avatarUrl = readAscii(buf);
+            response.params.avatarId = readInt(buf);
+            response.params.chipBalance = readLong(buf);
+            response.params.starBalance = readLong(buf);
+            response.params.ratingElo = readLong(buf);
+            response.params.cssOffset = readByte(buf);
+            let url = null;
+            let avatarUrl = response.params.avatarUrl;
+            let avatarId = response.params.avatarId;
+            if (avatarUrl != null && avatarUrl !== "") {
+                url = avatarUrl;
+                if (!url.startsWith("http") && !url.startsWith("//")) url = cdnHost + url;
+            } else url = "https://chesscdn.game8.io/com/ftl/game/images/avatar/builtin" + avatarId + ".png";
+            response.params.avatarUrl = url;
+            break;
         case 616:
             response.command = "LOGIN_FB_SIGNATURE2";
             response.params = {
@@ -426,6 +446,11 @@ function parseMessage(data) {
             break;
     } return response;
 }
+
+let path = Buffer.from("01ae0001054c6f626279054c6f626279000400531ea3006e0068000000003f0000000000001784000000000000000000000000000004c107000000000000047e00000000000004e2", "hex");
+let m1 = parseMessage(path); console.log(JSON.stringify(m1, null, 4));
+path = Buffer.from("01ae000204526f6f6d01330005004e006500700061006c055461626c65053239393237000800310035002700200052006f006f0062000000003f0000000000001784000000000000000000000000000004c107000000000000047e00000000000004e2", "hex");
+let m2 = parseMessage(path); console.log(JSON.stringify(m2, null, 4));
 
 /*******************************\
  ===============================
