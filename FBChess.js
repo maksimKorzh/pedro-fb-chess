@@ -1,5 +1,5 @@
 // Temp
-DEBUG = false;
+DEBUG = true;
 
 // Packeges
 const { app, BrowserWindow, ipcMain, Menu } = require("electron");
@@ -12,10 +12,29 @@ var fbCredentials = null;
 var engine = null;
 
 // App constants
+const COORDS = [
+    "a1", "b1", "c1", "d1", "e1", "f1", "g1", "h1",
+    "a2", "b2", "c2", "d2", "e2", "f2", "g2", "h2",
+    "a3", "b3", "c3", "d3", "e3", "f3", "g3", "h3",
+    "a4", "b4", "c4", "d4", "e4", "f4", "g4", "h4",
+    "a5", "b5", "c5", "d5", "e5", "f5", "g5", "h5",
+    "a6", "b6", "c6", "d6", "e6", "f6", "g6", "h6",
+    "a7", "b7", "c7", "d7", "e7", "f7", "g7", "h7",
+    "a8", "b8", "c8", "d8", "e8", "f8", "g8", "h8",
+];
+
 const KEEP_ALIVE_INTERVAL = 7500;
 const OPCODES = {
     "PONG": 300,
     "PING": 301,
+    "PLAYER_ENTERED": 406,
+    "PLAYER_EXITED": 407,
+    "SLOT_IN_TABLE_CHANGED": 416,
+    "START_MATCH": 417,
+    "GAME_OVER": 418,
+    "SET_TURN": 420,
+    "SHOW_LUCKY_WHEEL": 424,
+    "SET_PLAYER_STATUS": 421,
     "GET_CURRENT_PATH": 430,
     "PLAY": 502,
     "MOVE": 529,
@@ -108,15 +127,15 @@ function connect(sender) {
     socket.on("open", function () {
         let login = loginFbSignature2();
         socket.send(login);
-        sender.send("websocket", "Connected to WebSocket\n");
+        sender.send("websocket", { "command": "Connected to WebSocket" });
         setInterval(function() { socket.send(keepAlive()); }, KEEP_ALIVE_INTERVAL);
     });
     socket.on("message", function (data) {
-        if (DEBUG) sender.send("websocket", parseMessage(data)); // new interface
-        sender.send("websocket", Buffer.from(data).toString("hex") + "\n"); // legacy
+        sender.send("websocket", parseMessage(data)); // new interface
+        //sender.send("websocket", Buffer.from(data).toString("hex") + "\n"); // legacy
     });
-    socket.on("error", function (error) { sender.send("websocket", "WebSocket error\n"); });
-    socket.on("close", function () { sender.send("websocket", "WebSocket connection closed.\n"); }); return socket;
+    socket.on("error", function (error) { sender.send("websocket", { "command": "WebSocket Error" }); });
+    socket.on("close", function () { sender.send("websocket", { "command": "WebSocket connection closed" }); }); return socket;
 }
 
 // Convert string to Int8Array
@@ -372,19 +391,75 @@ function getCurrentPath() {
 }
 
 // Parse web socket message
-function parseMessage(data) {
+function parseMessage(data) { // tableSlot is side to move, 0 - White; 1 -Black; -2 None;
     let response = { "command": "", "params": {} };
     let buf = { "data": data, "offset": 0 };
-    let opcode = readShort(buf); readByte(buf); // offset
+    let opcode = readShort(buf);
     switch (opcode) {
         case 300: response.command = "PONG"; break;
+        case 406:
+            response.command = "PLAYER_ENTERED";
+            response.params = {
+                "enterStatus": readByte(buf),
+                "playerId": readLong(buf),
+                "playerName": readString(buf),
+                "playerChipBalance": readLong(buf),
+                "playerEloRating": readLong(buf),
+                "avatarUrl": readAscii(buf),
+                "avatarId": readInt(buf),
+                "playerLevel": readInt(buf),
+                "mode": readByte(buf),
+                "starBalance": readLong(buf)
+            }; break;
+        case 407: response.command = "PLAYER_EXITED"; break;
+        case 416:
+            response.command = "SLOT_IN_TABLE_CHANGED";
+            response.params = {
+                "playerName": readString(buf),
+                "tableSlot": readByte(buf),
+                "playerChipBalance": readLong(buf),
+                "playerEloRating": readLong(buf),
+                "playerLevel": readByte(buf),
+                "avatarId": readShort(buf),
+                "avatarUrl": readAscii(buf),
+                "gender": ((readByte(buf) == 1) ? "MALE" : "FEMALE"),
+                "tableOwner": (readByte(buf) == 1),
+                "playerId": readLong(buf),
+                "starBalance": readLong(buf) 
+            }; break;
+        case 417: response.command = "START_MATCH"; break;
+        case 418: response.command = "GAME_OVER"; break;
+        case 420:
+            response.command = "SET_TURN";
+            let tableSlot = readByte(buf);
+            let countDown = readShort(buf);
+            let timeLeft = readShort(buf) * 1e3;
+            let countDownMinutes = String(Math.floor(countDown / 60)).padStart(2, "0");
+            let countDownSeconds = String(countDown % 60).padStart(2, "0");
+            let totalSeconds = Math.floor(timeLeft / 1000);
+            let remainingMinutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
+            let remainingSeconds = String(totalSeconds % 60).padStart(2, "0");
+            response.params = {
+                "tableSlot": tableSlot,
+                "countDown": countDown,
+                "timeLeft": timeLeft,
+                "formatCountDown": countDownMinutes + ":" + countDownSeconds,
+                "formatTimeLeft": remainingMinutes + ":" + remainingSeconds,
+            }; break;
+        case 421:
+            response.command = "SET_PLAYER_STATUS";
+            response.params = {
+                "tableSlot": readByte(buf),
+                "matchPoint": readAscii(buf)
+            }; break;
         case 424: response.command = "SHOW_LUCKY_WHEEL"; break;
         case 430:
+            readByte(buf);
             response.command = "GET_CURRENT_PATH";
             response.params = { "places": [] };
-            let count = readByte(buf);
+            let pathCount = readByte(buf);
             let path = {};
-            for (let i = 0; i < count; i++) {
+            for (let i = 0; i < pathCount; i++) {
                 path = {
                     "roomType": readAscii(buf).toLowerCase(),
                     "roomId": readAscii(buf),
@@ -392,9 +467,9 @@ function parseMessage(data) {
                 }; response.params.places.push(path);
             } response.params.avatarUrl = readAscii(buf);
             response.params.avatarId = readInt(buf);
-            response.params.chipBalance = readLong(buf);
+            response.params.playerChipBalance = readLong(buf);
             response.params.starBalance = readLong(buf);
-            response.params.ratingElo = readLong(buf);
+            response.params.playerEloRating = readLong(buf);
             response.params.cssOffset = readByte(buf);
             let url = null;
             let avatarUrl = response.params.avatarUrl;
@@ -405,7 +480,14 @@ function parseMessage(data) {
             } else url = "https://chesscdn.game8.io/com/ftl/game/images/avatar/builtin" + avatarId + ".png";
             response.params.avatarUrl = url;
             break;
+        case 529:
+            response.command = "MOVE";
+            response.params = {
+                "src": COORDS[readByte(buf)],
+                "dst": COORDS[readByte(buf)]
+            }; break;
         case 616:
+            readByte(buf);
             response.command = "LOGIN_FB_SIGNATURE2";
             response.params = {
                 "refresh": readString(buf),
@@ -439,18 +521,13 @@ function parseMessage(data) {
                 const bet = { id: i, value: readInt(buf) };
                 bets.push(bet);
             } response.params.bets = bets;
-            let taxCount = readByte(buf); console.log("taxCount", taxCount)
+            let taxCount = readByte(buf);
             for (let i = 0; i < taxCount; i++) response.params.taxes.push(readInt(buf) / 1e6);
             response.params.zoneEntranceRate = readInt(buf) / 1e6;
             response.params.shouldRefineProfile = (1 == readByte(buf));
             break;
     } return response;
 }
-
-let path = Buffer.from("01ae0001054c6f626279054c6f626279000400531ea3006e0068000000003f0000000000001784000000000000000000000000000004c107000000000000047e00000000000004e2", "hex");
-let m1 = parseMessage(path); console.log(JSON.stringify(m1, null, 4));
-path = Buffer.from("01ae000204526f6f6d01330005004e006500700061006c055461626c65053239393237000800310035002700200052006f006f0062000000003f0000000000001784000000000000000000000000000004c107000000000000047e00000000000004e2", "hex");
-let m2 = parseMessage(path); console.log(JSON.stringify(m2, null, 4));
 
 /*******************************\
  ===============================

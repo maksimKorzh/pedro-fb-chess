@@ -1,7 +1,7 @@
 const output = document.getElementById('output');
 const input = document.getElementById('input');
 
-let userName = ""; userSide = 0;
+let player = {};
 var board = null, lock = 0, src = "", dst = "";
 
 const coords = [
@@ -66,138 +66,110 @@ function print(msg) {
     output.scrollTop = output.scrollHeight;
 }
 
-// Extract player info
-function getPlayerInfo(hex) {
-    let name = "";
-    let coins = "";
-    let rating = "";
-    let startOffset = 22;
-    while (startOffset < hex.length) {
-        let byte = parseInt(hex.slice(startOffset, startOffset + 2), 16)
-        if (byte >= 48 && byte <= 119) name += String.fromCharCode(byte);
-        if (hex.slice(startOffset, startOffset + 4) == "0000") {
-            coins = parseInt(hex.slice(startOffset + 12, startOffset + 16), 16);
-            rating = parseInt(hex.slice(startOffset + 28, startOffset + 32), 16);
-            break;
-        } startOffset += 2;
-    } return {
-        "name": name,
-        "coins": coins.toString(),
-        "rating": rating.toString()
-    }
+
+function highlightLastMove(src, dst) {
+    requestAnimationFrame(() => {
+        $("#chessboard").find('.square-55d63').removeClass('highlight');
+        $("#chessboard").find('.square-' + src).addClass('highlight');
+        $("#chessboard").find('.square-' + dst).addClass('highlight');
+    });
 }
 
-// Slot names
-function getSlot(hex) {
-    const bytes = hex.match(/[0-9a-f]{2}/gi)?.map(b => parseInt(b, 16)) || [];
-    let side = 0;
-    for (let i = 0; i + 1 < bytes.length;) {
-        if (bytes[i] >= 32 && bytes[i] <= 126 && bytes[i + 1] === 0) {
-            let name = '';
-            while ( i + 1 < bytes.length && bytes[i] >= 32 && bytes[i] <= 126 && bytes[i + 1] === 0 ) {
-                name += String.fromCharCode(bytes[i]);
-                i += 2;
-            } if (i + 1 < bytes.length && bytes[i] >= 32 && bytes[i] <= 126 && bytes[i + 1] === 1) {
-                name += String.fromCharCode(bytes[i]);
-                side = 1;
-                i += 2;
-            } if (name.length >= 2) return { "name": name, "side": side };
-        } else i++;
-    } return { name: 'empty', side: -1 };
+function unhighlight() {
+    requestAnimationFrame(() => {
+        $("#chessboard").find('.square-55d63').removeClass('highlight');
+    });
 }
-
-// Time control
-function decodeClock(hex) {
-    const bytes = hex.match(/.{2}/g).map(b => parseInt(b, 16));
-    const player = bytes[2] === 1 ? 'Black' : 'White';
-    const seconds = (bytes[5] << 8) | bytes[6];
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${player}: ${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
-}
-
-
-/*window.fbchess.onWebSocketMsg((data) => {
-    console.log(data);
-    try { print( JSON.stringify(data, null, 4) + "\n" ); }
-    catch(e) { print(data) + "\n"; }
-});*/
 
 window.fbchess.onWebSocketMsg((data) => {
-    if (data.includes("WebSocket")) print(data);
-    console.log(data.replaceAll(" ", ""), hexToAscii(data.replaceAll(" ", "")));
-
+    // Logs
+    console.log(data);
     
-    // Update move on board
-    if (data.startsWith("0211")) {
-        let src = coords[parseInt((data[4] + data[5]), 16)];
-        let dst = coords[parseInt((data[6] + data[7]), 16)];
+    if (data.command.includes("WebSocket")) print(data.command + "\n");
+    
+    // Update board
+    if (data.command == "MOVE") {
+        let src = data.params.src;
+        let dst = data.params.dst;
         game.move({
             from: src,
             to: dst,
             promotion: 'q' // NOTE: always promote to a queen for example simplicity
         }); board.position(game.fen());
-        
-        requestAnimationFrame(() => {
-            $("#chessboard").find('.square-55d63').removeClass('highlight');
-            $("#chessboard").find('.square-' + src).addClass('highlight');
-            $("#chessboard").find('.square-' + dst).addClass('highlight');
-        });
+        highlightLastMove(src, dst);
     }
     
-    // Set player status
-    else if (data.startsWith("01a5")) {
-        print("Opponent is ready, accepting match...\n");
-        window.fbchess.sendGUICommand("012b");
+    // Player status
+    if (data.command == "LOGIN_FB_SIGNATURE2") {
+        player = {
+            "id": data.params.playerId,
+            "name": data.params.playerFullName,
+            "slot": -1
+        }; print(`${player.name} logged in\n`)
     }
-        
+    
+    // Player status
+    /*if (data.command == "SET_PLAYER_STATUS") { // this looks to be reflecting player ready, not opponent like I thought
+        let tableSlot = data.params.tableSlot;
+        let matchPoint = data.params.matchPoint;
+        let color = "";
+        if (tableSlot == 0) color == "White";
+        if (tableSlot == 1) color == "Black";
+        //if (color != "") print(`${color} is ${matchPoint}, type "start" [optionally]\n`)
+    }*/
+    
     // Game started
-    else if (data.startsWith("01a1")) {
-        window.fbchess.sendGUICommand("data", "ucinewgame");
+    if (data.command == "START_MATCH") {
         board.position("start");
         game = new Chess();
-        board.flip((userSide == 1 ? "black" : "white"));
-        requestAnimationFrame(() => {
-            $("#chessboard").find('.square-55d63').removeClass('highlight');
-        }); print(`Game started\n`);
+        if (player.slot == 0) board.flip("white");
+        if (player.slot == 1) board.flip("black");
+        unhighlight;
+        print(`Game started\n`);
     }
     
-    // Game over
-    else if (data.startsWith("01a2")) {
-        requestAnimationFrame(() => {
-            $("#chessboard").find('.square-55d63').removeClass('highlight');
-        }); print("Game finished\n");
+    // Game finished
+    if (data.command == "GAME_OVER") {
+        unhighlight();
+        print("Game finished\n");
     }
-
+    
     // Player entered
-    else if (data.startsWith("0196")) {
-        let player = getPlayerInfo(data);
-        if (userName == "") userName = player.name;
-        print(`Player entered ${player.name}(${player.rating}) with ${player.coins} coins\n`)
+    if (data.command == "PLAYER_ENTERED") {
+        let name = data.params.playerName;
+        let rating = data.params.playerEloRating;
+        let coins = data.params.playerChipBalance;
+        print(`${name}(${rating}) entered with ${coins} coins\n`)
     }
     
-    // Player exited
-    else if (data.startsWith("0197")) {
-        print("Player exited\n")
+    // Player entered
+    if (data.command == "PLAYER_EXITED") {
+        print("Player exited\n");
     }
     
-    // Slot changed
-    else if (data.startsWith("01a0")) {
-        let slot = getSlot(data);
-        let name = slot.name;
-        let side = slot.side;
-        let color = (side ? "Black" : "White");
-        let you = (name == userName);
-        if (you) userSide = side;
-        if (name != userName && name != "empty") userSide = side ^ 1;
-        let userColor = (userSide ? "Black" : "White");
-        print(`${color} is ${name + (you ? "(you)" : "")}, user side is ${userColor}\n`);
+    // Table slot changed
+    if (data.command == "SLOT_IN_TABLE_CHANGED") {
+        let playerId = data.params.playerId;
+        let playerName = data.params.playerName;
+        let playerEloRating = data.params.playerEloRating;
+        let tableSlot = data.params.tableSlot;
+        let color = "";
+        if (tableSlot == 0) color = "White";
+        if (tableSlot == 1) color = "Black";
+        let you = (player.id == playerId);
+        if (you) player.slot = tableSlot;
+        if (playerName == "") print(`${color} slot is empty\n`);
+        else print(`${(you ? "(you)" : "") + playerName}(${playerEloRating}) is ${color}\n`);
     }
     
     // Clock
-    else if (data.startsWith("01a4")) {
-        let time = decodeClock(data);
-        if (!time.includes("0:00") && !time.includes("15:00")) print(time + "\n");
+    if (data.command == "SET_TURN") {
+        let tableSlot = data.params.tableSlot;
+        let color = "";
+        if (tableSlot == 0) color = "White";
+        if (tableSlot == 1) color = "Black";
+        let time = data.params.formatTimeLeft;
+        if (tableSlot != -2) print(`${color} ${time}\n`);
     }
 });
 
