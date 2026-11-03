@@ -81,6 +81,13 @@ function unhighlight() {
     });
 }
 
+function setPlayer(color, playerName, playerElo, avatarUrl) {
+    let avatar = document.getElementById(color + "-avatar");
+    avatar.style.backgroundImage = avatarUrl ? `url("${avatarUrl}")` : "none";
+    let name = document.getElementById(color + "-name");
+    name.innerText = `${playerName}${(playerElo ? ("(" + playerElo + ")") : "")}`;
+}
+
 window.fbchess.onWebSocketMsg((data) => {
     // Logs
     console.log(data);
@@ -108,23 +115,13 @@ window.fbchess.onWebSocketMsg((data) => {
         }; print(`${player.name} logged in\n`)
     }
     
-    // Player status
-    /*if (data.command == "SET_PLAYER_STATUS") { // this looks to be reflecting player ready, not opponent like I thought
-        let tableSlot = data.params.tableSlot;
-        let matchPoint = data.params.matchPoint;
-        let color = "";
-        if (tableSlot == 0) color == "White";
-        if (tableSlot == 1) color == "Black";
-        //if (color != "") print(`${color} is ${matchPoint}, type "start" [optionally]\n`)
-    }*/
-    
     // Game started
     if (data.command == "START_MATCH") {
         board.position("start");
         game = new Chess();
-        if (player.slot == 0) board.flip("white");
-        if (player.slot == 1) board.flip("black");
-        unhighlight;
+        //if (player.slot == 0) board.orientation("white");
+        //if (player.slot == 1) board.orientation("black");
+        unhighlight();
         print(`Game started\n`);
     }
     
@@ -151,25 +148,34 @@ window.fbchess.onWebSocketMsg((data) => {
     if (data.command == "SLOT_IN_TABLE_CHANGED") {
         let playerId = data.params.playerId;
         let playerName = data.params.playerName;
-        let playerEloRating = data.params.playerEloRating;
+        let playerElo = data.params.playerEloRating;
         let tableSlot = data.params.tableSlot;
+        let avatarUrl = data.params.avatarUrl;
         let color = "";
-        if (tableSlot == 0) color = "White";
-        if (tableSlot == 1) color = "Black";
+        if (tableSlot == 0) color = "white";
+        if (tableSlot == 1) color = "black";
         let you = (player.id == playerId);
-        if (you) player.slot = tableSlot;
+        if (you) {
+            player.slot = tableSlot;
+            board.orientation(color);
+        }
         if (playerName == "") print(`${color} slot is empty\n`);
-        else print(`${(you ? "(you)" : "") + playerName}(${playerEloRating}) is ${color}\n`);
+        else print(`${(you ? "(you)" : "") + playerName}(${playerElo}) is ${color}\n`);
+        setPlayer(color, playerName, playerElo, avatarUrl);
     }
     
     // Clock
     if (data.command == "SET_TURN") {
         let tableSlot = data.params.tableSlot;
         let color = "";
-        if (tableSlot == 0) color = "White";
-        if (tableSlot == 1) color = "Black";
+        if (tableSlot == 0) color = "white";
+        if (tableSlot == 1) color = "black";
         let time = data.params.formatTimeLeft;
-        if (tableSlot != -2) print(`${color} ${time}\n`);
+        let countDown = data.params.formatCountDown;
+        if (tableSlot != -2) {
+            document.getElementById(color + "-countdown").innerText = countDown;
+            document.getElementById(color + "-clock").innerText = time;
+        }
     }
 });
 
@@ -194,24 +200,12 @@ window.fbchess.onEngineMsg((data) => {
 input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
         const cmd = input.value;
-        
-        // Temp
-        if (cmd == "flip") {
+        if (cmd == "flip") { // temp
             board.position(game.fen());
             board.flip();
             input.value = "";
             return;
-        }
-        
-        /******************************\
-         ==============================
-         
-                 SERVER COMMANDS
-                 
-         ==============================
-        \******************************/
-        
-        if (cmd == "connect") {
+        } else if (cmd == "connect") {
             let msg = createCommand("connect");
             window.fbchess.sendGUICommand(msg);
         } if (cmd == "disconnect") {
@@ -220,17 +214,26 @@ input.addEventListener("keydown", (e) => {
         } else if (cmd == "path") {
             let msg = createCommand("path");
             window.fbchess.sendGUICommand(msg);
+        } else if (cmd == "lobby") {
+            let msg = createCommand("lobby");
+            window.fbchess.sendGUICommand(msg);
+            setPlayer("white", "White Player", "", "");
+            setPlayer("black", "Black Player", "", "");
+            board.position("start");
+            game = new Chess();
+        } else if (cmd == "room") {
+            let msg = createCommand("room", {"roomId": "3"});
+            window.fbchess.sendGUICommand(msg);
         } else if (cmd == "game") {
-            let createGame = [
-                // Enter place
-                "01910b4c6f6262792e6368657373000000056368657373",
-                
-                // Enter child place
-                "01920133000000",
-
-                // match 15 main time, 60s per move
-                "019502030d6d617463684475726174696f6e0002003100350c7475726e4475726174696f6e0002003900300b6163634475726174696f6e0001003000"
-            ]; for (let msg of createGame) window.fbchess.sendGUICommand(createCommand("hex", {data: msg}));
+            let msg = createCommand("game", {
+                "betAmountId": "2",
+                "tableArgs": {
+                    "matchDuration": "15",
+                    "turnDuration": "90",
+                    "accDuration": "0"
+                },
+                "tableName": ""
+            }); window.fbchess.sendGUICommand(msg);
         } else if (cmd == "start") {
             window.fbchess.sendGUICommand(createCommand("hex", {data: "012b"}));
         } else if (cmd == "resign") {

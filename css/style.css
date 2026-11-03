@@ -1,3 +1,4 @@
+
 :root {
     color-scheme: dark;
 
@@ -38,6 +39,55 @@ body {
     font-family: "Segoe UI", Arial, sans-serif;
 }
 
+button {
+    display: block;
+    width: calc(100% - 12px);
+    min-height: 40px;
+    margin: 6px;
+    padding: 8px 14px;
+
+    background: #202936;
+    color: #dce5f0;
+    border: 1px solid #354254;
+    border-radius: 6px;
+
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+button:hover {
+    background: #293747;
+    border-color: #69d5b1;
+    color: #69d5b1;
+}
+
+button:active {
+    background: #17232d;
+    border-color: #69d5b1;
+    transform: translateY(1px);
+}
+
+button:focus-visible {
+    outline: 2px solid #69d5b1;
+    outline-offset: 2px;
+}
+
+button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+button:focus {
+    outline: none;
+    box-shadow: none;
+}
+
+/* CHESSBOARD */
+
 #chessboard {
     flex: 0 0 auto;
 
@@ -52,7 +102,9 @@ body {
     align-self: center;
 }
 
-#terminal {
+/* PANEL */
+
+#panel {
     display: flex;
     flex: 1 1 0;
     flex-direction: column;
@@ -60,10 +112,7 @@ body {
     width: 0;
     height: min(
         calc(100vh - 2 * var(--padding)),
-        min(
-            calc(100vh - 2 * var(--padding)),
-            calc(100vw - 2 * var(--padding) - var(--gap))
-        ),
+        calc(100vw - 2 * var(--padding) - var(--gap)),
         50vw
     );
 
@@ -78,14 +127,135 @@ body {
     box-shadow: 0 8px 28px rgb(0 0 0 / 18%);
 }
 
+/* ROW 1 - PLAYERS */
+
+#players {
+    display: flex;
+    flex: 0 0 auto;
+    width: 100%;
+    gap: 4px;
+    padding: 6px;
+}
+
+.player {
+    display: flex;
+    flex: 1 1 50%;
+    min-width: 0;
+
+    padding: 5px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--input-bg);
+}
+
+.player-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+}
+
+.avatar {
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    border-radius: 50%;
+    background-color: #354254;
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-image: none;
+}
+
+#white-name,
+#black-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    font-size: 16px;
+    font-weight: bold;
+}
+
+/* ROW 2 - CLOCKS */
+
+#clocks {
+    display: flex;
+    flex: 0 0 auto;
+    width: 100%;
+    gap: 4px;
+    padding: 0 6px 6px;
+}
+
+.clock-group {
+    display: flex;
+    flex: 1 1 50%;
+    min-width: 0;
+    gap: 4px;
+}
+
+.clock-item {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+
+    min-width: 0;
+    padding: 5px 2px;
+
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--input-bg);
+}
+
+#white-clocks .clock-item {
+    background: #e8e8e8;
+    color: #111;
+    border-color: #bbb;
+}
+
+#white-clocks .clock-label {
+    color: #555;
+}
+
+.clock-label {
+    font-size: 11px;
+    color: var(--muted);
+}
+
+.clock-value {
+    font-family: monospace;
+    font-size: 20px;
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+/* STOCKFISH BUTTON */
+
+#stockfish {
+    flex: 0 0 auto;
+    width: calc(100% - 12px);
+    min-height: 40px;
+    margin: 0 6px;
+
+    font-size: 20px;
+}
+
+/* OUTPUT */
+
 #output {
     flex: 1 1 0;
 
     width: 100% !important;
     height: auto !important;
+
     min-width: 0;
     min-height: 0;
-    margin: 0;
+
+    margin: 5px 0;
     padding: 14px;
 
     overflow: auto;
@@ -99,6 +269,8 @@ body {
     scrollbar-width: thin;
     scrollbar-color: var(--border) var(--console-bg);
 }
+
+/* INPUT */
 
 #input {
     flex: 0 0 48px;
@@ -136,25 +308,21 @@ body {
     border-radius: 8px;
 }
 
+/* CHESSBOARD HIGHLIGHT */
+
 .highlight {
-  box-shadow: inset 0 0 3px 3px yellow;
+    box-shadow: inset 0 0 3px 3px yellow;
 }
 
+/* PORTRAIT */
+
 @media (orientation: portrait) {
-    html,
-    body {
-        width: 100%;
-        height: 100%;
-        min-height: 0;
-        overflow: hidden;
-    }
 
     body {
         flex-direction: column;
         align-items: stretch;
         gap: 10px;
         padding: 10px;
-        overflow: hidden;
     }
 
     #chessboard {
@@ -171,35 +339,76 @@ body {
         aspect-ratio: 1 / 1;
     }
 
-    #terminal {
+    #panel {
         flex: 1 1 0;
-
         width: 100%;
         height: 0;
-        min-width: 0;
         min-height: 0;
-        max-height: none;
-
         align-self: stretch;
     }
 
+    #avatar {
+        width: 32px;
+        height: 32px;
+    }
+
     #output {
-        flex: 1 1 0;
-        min-height: 0;
         padding: 10px;
         font-size: 12px;
     }
 
     #input {
-        flex: 0 0 46px;
+        flex-basis: 46px;
         font-size: 14px;
     }
 }
 
+/* SHORT LANDSCAPE */
+
 @media (orientation: landscape) and (max-height: 500px) {
+
     :root {
         --gap: 8px;
         --padding: 8px;
+    }
+
+    #players {
+        padding: 3px 5px;
+    }
+
+    .avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        object-fit: cover;
+        background: #ccc;
+    }
+
+    #white-name,
+    #black-name {
+        font-size: 13px;
+    }
+
+    #clocks {
+        padding: 0 5px 4px;
+    }
+
+    .clock-item {
+        padding: 2px;
+    }
+
+    .clock-label {
+        font-size: 9px;
+    }
+
+    .clock-value {
+        font-size: 15px;
+    }
+
+    #stockfish {
+        min-height: 34px;
+        height: 34px;
+        font-size: 15px;
     }
 
     #output {

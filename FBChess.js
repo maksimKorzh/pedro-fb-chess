@@ -27,6 +27,9 @@ const KEEP_ALIVE_INTERVAL = 7500;
 const OPCODES = {
     "PONG": 300,
     "PING": 301,
+    "ENTER_PLACE": 401,
+    "ENTER_CHILD_PLACE": 402,
+    "CREATE_RULE": 405,
     "PLAYER_ENTERED": 406,
     "PLAYER_EXITED": 407,
     "SLOT_IN_TABLE_CHANGED": 416,
@@ -47,8 +50,8 @@ if (DEBUG) {
         locale: 'en_GB',
         name: null,
         photo: null,
-        signature: 'i-XwFMGTd1e3LmhELauJBpKKpQLqwClPvKlGUB09p4U.eyJhbGdvcml0aG0iOiJITUFDLVNIQTI1NiIsImlzc3VlZF9hdCI6MTc5MzM2OTE4NiwicGxheWVyX2lkIjoiMjk0Njg5MjI2MjI3MDAxMjgiLCJyZXF1ZXN0X3BheWxvYWQiOiJoZWxsbyJ9',
-        timestamp: 1793369186350
+        signature: '9gWawTmY_G9rZYXeLwS0kqyB8iSmTg5SJ0mIgHVGr-s.eyJhbGdvcml0aG0iOiJITUFDLVNIQTI1NiIsImlzc3VlZF9hdCI6MTc5MzcyNDQ3NCwicGxheWVyX2lkIjoiMjk0Njg5MjI2MjI3MDAxMjgiLCJyZXF1ZXN0X3BheWxvYWQiOiJoZWxsbyJ9',
+        timestamp: 1793724474825
     };
 }
 
@@ -129,11 +132,7 @@ function connect(sender) {
         socket.send(login);
         sender.send("websocket", { "command": "Connected to WebSocket" });
         setInterval(function() { socket.send(keepAlive()); }, KEEP_ALIVE_INTERVAL);
-    });
-    socket.on("message", function (data) {
-        sender.send("websocket", parseMessage(data)); // new interface
-        //sender.send("websocket", Buffer.from(data).toString("hex") + "\n"); // legacy
-    });
+    }); socket.on("message", function (data) { sender.send("websocket", parseMessage(data)); });
     socket.on("error", function (error) { sender.send("websocket", { "command": "WebSocket Error" }); });
     socket.on("close", function () { sender.send("websocket", { "command": "WebSocket connection closed" }); }); return socket;
 }
@@ -390,6 +389,49 @@ function getCurrentPath() {
     });
 }
 
+// Enter place
+function enterPlace(placePath) {
+    return createMessage("ENTER_PLACE", msg => {
+        writeAscii(placePath + "", msg);
+        writeString("", msg); // password, skipped for now
+        writeByte(0, msg); // always enter in view mode
+        writeAscii("chess", msg);
+    });
+}
+
+// Enter child place
+function enterChildPlace(placeName, tableId, gameMode) {
+    return createMessage("ENTER_CHILD_PLACE", msg => {
+        writeAscii(placeName + "", msg);
+        writeString(tableId, msg);
+        writeByte(gameMode, msg);
+    });
+}
+
+// Create game table
+function createTable(betAmountId, tableArgs, tableName) {
+    return createMessage("CREATE_RULE", msg => {
+        writeByte(betAmountId, msg);
+        writeByte(Object.keys(tableArgs).length, msg);
+        for (let key in tableArgs) {
+            writeAscii(key, msg);
+            writeString(tableArgs[key], msg);
+        } writeAscii(tableName, msg);
+    });
+}
+
+// Get user avatar
+function getAvatar(response) {
+    let url = null;
+    let avatarUrl = response.params.avatarUrl;
+    let avatarId = response.params.avatarId;
+    if (avatarUrl != null && avatarUrl !== "") {
+        url = avatarUrl;
+        if (!url.startsWith("http") && !url.startsWith("//")) url = cdnHost + url;
+    } else url = "https://chesscdn.game8.io/com/ftl/game/images/avatar/builtin" + avatarId + ".png";
+    response.params.avatarUrl = url;
+}
+
 // Parse web socket message
 function parseMessage(data) { // tableSlot is side to move, 0 - White; 1 -Black; -2 None;
     let response = { "command": "", "params": {} };
@@ -426,7 +468,7 @@ function parseMessage(data) { // tableSlot is side to move, 0 - White; 1 -Black;
                 "tableOwner": (readByte(buf) == 1),
                 "playerId": readLong(buf),
                 "starBalance": readLong(buf) 
-            }; break;
+            }; getAvatar(response); break;
         case 417: response.command = "START_MATCH"; break;
         case 418: response.command = "GAME_OVER"; break;
         case 420:
@@ -471,14 +513,7 @@ function parseMessage(data) { // tableSlot is side to move, 0 - White; 1 -Black;
             response.params.starBalance = readLong(buf);
             response.params.playerEloRating = readLong(buf);
             response.params.cssOffset = readByte(buf);
-            let url = null;
-            let avatarUrl = response.params.avatarUrl;
-            let avatarId = response.params.avatarId;
-            if (avatarUrl != null && avatarUrl !== "") {
-                url = avatarUrl;
-                if (!url.startsWith("http") && !url.startsWith("//")) url = cdnHost + url;
-            } else url = "https://chesscdn.game8.io/com/ftl/game/images/avatar/builtin" + avatarId + ".png";
-            response.params.avatarUrl = url;
+            getAvatar(response);
             break;
         case 529:
             response.command = "MOVE";
@@ -579,8 +614,19 @@ ipcMain.on("gui", (event, msg) => {
     } else if (msg.command == "path") {
         let path = getCurrentPath();
         socket.send(path);
+    } else if (msg.command == "lobby") {
+        let lobby = enterPlace("Lobby.chess");
+        socket.send(lobby);
+    } else if (msg.command == "room") {
+        let room = enterChildPlace(msg.params.roomId);
+        socket.send(room);
+    } else if (msg.command == "game") {
+        let betAmountId = msg.params.betAmountId;
+        let tableArgs = msg.params.tableArgs;
+        let tableName = msg.params.tableName;
+        let game = createTable(betAmountId, tableArgs, tableName);
+        socket.send(game);
     } else if (msg.command == "hex") {
-        //console.log("tries to send", msg);
         socket.send(Buffer.from(msg.params.data, "hex"));
     }
 }); ipcMain.on("uci", (event, msg) => {
