@@ -86,6 +86,22 @@ button:focus {
     box-shadow: none;
 }
 
+.button-row {
+    display: flex;
+    gap: 8px;
+    padding: 4px;
+    width: 100%;
+}
+
+.button-row button {
+    flex: 1;
+    min-width: 0;
+    width: auto;
+    margin: 0;
+    height: 40px;
+    font-size: 16px;
+}
+
 /* CHESSBOARD */
 
 #chessboard {
@@ -160,7 +176,6 @@ button:focus {
     width: 36px;
     height: 36px;
     flex: 0 0 36px;
-    border-radius: 50%;
     background-color: #354254;
     background-position: center;
     background-size: cover;
@@ -379,7 +394,6 @@ button:focus {
     .avatar {
         width: 36px;
         height: 36px;
-        border-radius: 50%;
         object-fit: cover;
         background: #ccc;
     }

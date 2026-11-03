@@ -474,18 +474,18 @@ function parseMessage(data) { // tableSlot is side to move, 0 - White; 1 -Black;
         case 420:
             response.command = "SET_TURN";
             let tableSlot = readByte(buf);
-            let countDown = readShort(buf);
+            let countdown = readShort(buf);
             let timeLeft = readShort(buf) * 1e3;
-            let countDownMinutes = String(Math.floor(countDown / 60)).padStart(2, "0");
-            let countDownSeconds = String(countDown % 60).padStart(2, "0");
+            let countdownMinutes = String(Math.floor(countdown / 60)).padStart(2, "0");
+            let countdownSeconds = String(countdown % 60).padStart(2, "0");
             let totalSeconds = Math.floor(timeLeft / 1000);
             let remainingMinutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
             let remainingSeconds = String(totalSeconds % 60).padStart(2, "0");
             response.params = {
                 "tableSlot": tableSlot,
-                "countDown": countDown,
+                "countdown": countdown,
                 "timeLeft": timeLeft,
-                "formatCountDown": countDownMinutes + ":" + countDownSeconds,
+                "formatCountdown": countdownMinutes + ":" + countdownSeconds,
                 "formatTimeLeft": remainingMinutes + ":" + remainingSeconds,
             }; break;
         case 421:

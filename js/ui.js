@@ -2,7 +2,10 @@ const output = document.getElementById('output');
 const input = document.getElementById('input');
 
 let player = {};
-var board = null, lock = 0, src = "", dst = "";
+var board = null, side = 0, lock = 0, src = "", dst = "";
+
+var intervalId;
+var whiteTime = 0, blackTime = 0, whiteCountdown = 0, blackCountdown = 0;
 
 const coords = [
     "a1", "b1", "c1", "d1", "e1", "f1", "g1", "h1",
@@ -16,6 +19,48 @@ const coords = [
 ];
 
 function createCommand(command, params = {}) { return { command, params }; }
+
+function startInterval() {
+  if (!intervalId) { // Prevent multiple intervals from being set
+    intervalId = setInterval(() => {
+      if (side == 1) {
+        blackTime -= 1;
+        blackCountdown -= 1;
+      } else {
+          whiteTime -= 1;
+          whiteCountdown -= 1;
+      } updateTimer();
+    }, 1000);
+  }
+}
+
+function stopInterval() {
+    if (intervalId) {
+      clearInterval(intervalId);
+      intervalId = null;
+      blackTime = 0;
+      whiteTime = 0;
+      whiteCountdown = 0;
+      blackCountdown = 0;
+      updateTimer();
+      document.getElementById('black-clock').innerHTML = '00:00';
+      document.getElementById('white-clock').innerHTML = '00:00';
+    }
+}
+
+function updateTimer() {
+  if (blackTime < 0 || whiteTime < 0 || whiteCountdown < 0 || blackCountdown < 0) return;
+  document.getElementById('black-clock').innerHTML = secToMin(blackTime);
+  document.getElementById('white-clock').innerHTML = secToMin(whiteTime);
+  document.getElementById('black-countdown').innerHTML = secToMin(blackCountdown);
+  document.getElementById('white-countdown').innerHTML = secToMin(whiteCountdown);
+}
+
+function secToMin(sec) {
+  const minutes = Math.floor(sec / 60);
+  const seconds = sec % 60;
+  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+}
 
 function hexToAscii(hex) {
   return hex.match(/.{1,2}/g)
@@ -119,15 +164,15 @@ window.fbchess.onWebSocketMsg((data) => {
     if (data.command == "START_MATCH") {
         board.position("start");
         game = new Chess();
-        //if (player.slot == 0) board.orientation("white");
-        //if (player.slot == 1) board.orientation("black");
         unhighlight();
+        startInterval();
         print(`Game started\n`);
     }
     
     // Game finished
     if (data.command == "GAME_OVER") {
         unhighlight();
+        stopInterval();
         print("Game finished\n");
     }
     
@@ -141,6 +186,7 @@ window.fbchess.onWebSocketMsg((data) => {
     
     // Player entered
     if (data.command == "PLAYER_EXITED") {
+        stopInterval();
         print("Player exited\n");
     }
     
@@ -168,13 +214,21 @@ window.fbchess.onWebSocketMsg((data) => {
     if (data.command == "SET_TURN") {
         let tableSlot = data.params.tableSlot;
         let color = "";
-        if (tableSlot == 0) color = "white";
-        if (tableSlot == 1) color = "black";
+        if (tableSlot == 0) color = "white", side = 0;
+        if (tableSlot == 1) color = "black", side = 1;
         let time = data.params.formatTimeLeft;
-        let countDown = data.params.formatCountDown;
+        let countdown = data.params.formatCountdown;
         if (tableSlot != -2) {
-            document.getElementById(color + "-countdown").innerText = countDown;
+            document.getElementById(color + "-countdown").innerText = countdown;
             document.getElementById(color + "-clock").innerText = time;
+            if (color == "white") {
+                whiteTime = Math.floor(data.params.timeLeft / 1000);
+                whiteCountdown = data.params.countdown;
+            }
+            if (color == "black") {
+                blackTime = Math.floor(data.params.timeLeft / 1000);
+                blackCountdown = data.params.countdown;
+            }
         }
     }
 });
@@ -251,6 +305,62 @@ input.addEventListener("keydown", (e) => {
         let terminal = document.getElementById("output");
         terminal.scrollTop = terminal.scrollHeight;
     }
+});
+
+// Create new table button
+document.getElementById("game").addEventListener("click", function() {
+    let msg = createCommand("lobby");
+    window.fbchess.sendGUICommand(msg);
+    setPlayer("white", "White Player", "", "");
+    setPlayer("black", "Black Player", "", "");
+    board.position("start");
+    game = new Chess();
+    
+    msg = createCommand("room", {"roomId": "3"});
+    window.fbchess.sendGUICommand(msg);
+    
+    msg = createCommand("game", {
+        "betAmountId": "2",
+        "tableArgs": {
+            "matchDuration": "15",
+            "turnDuration": "90",
+            "accDuration": "0"
+        },
+        "tableName": ""
+    }); window.fbchess.sendGUICommand(msg);
+});
+
+// Enter lobby button
+document.getElementById("lobby").addEventListener("click", function() {
+    let msg = createCommand("lobby");
+    window.fbchess.sendGUICommand(msg);
+    setPlayer("white", "White Player", "", "");
+    setPlayer("black", "Black Player", "", "");
+    board.position("start");
+});
+
+// Connect to server button
+document.getElementById("connect").addEventListener("click", function() {
+    let msg = createCommand("connect");
+    window.fbchess.sendGUICommand(msg);
+});
+
+// Disonnect to server button
+document.getElementById("disconnect").addEventListener("click", function() {
+    let msg = createCommand("disconnect");
+    window.fbchess.sendGUICommand(msg);
+});
+
+// Start button
+document.getElementById("start").addEventListener("click", function() {
+    let msg = createCommand("start");
+    window.fbchess.sendGUICommand(msg);
+});
+
+// Resign button
+document.getElementById("resign").addEventListener("click", function() {
+    let msg = createCommand("resign");
+    window.fbchess.sendGUICommand(msg);
 });
 
 // Stockfish button
