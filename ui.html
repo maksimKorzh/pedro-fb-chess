@@ -45,6 +45,11 @@
                     </div>
                 </div>
             </div>
+            <div id="clocks">
+                <div class="clock-item">
+                    <span id="stats" style="min-height: 25px; font-size: 16px; color: var(--muted); margin-top: 10px;" class="clock-value">...</span>
+                </div>
+            </div>
             <div class="button-row">
                 <button id="connect">Connect</button>
                 <button id="disconnect">Disconnect</button>
@@ -58,7 +63,7 @@
                 <button id="resign">Resign</button>
             </div>
             <div class="button-row">
-                <button style="height: 40px; font-size: 20px;" id="stockfish">Ask Stockfish for a move</button>
+                <button id="stockfish">Ask Stockfish for a move</button>
             </div>
             <pre id="output" style="width: ` + (window.innerWidth - canvas.width-34) + `px; height: ` + (canvas.width-58) + `px; font-family: monospace; font-size: calc(100vw/113); overflow: auto;"></pre>
             <input id="input" spellcheck="false" placeholder="Type a command..." style="width: ` + (window.innerWidth - canvas.width-34) + `px; font-size: 18px;" autofocus>

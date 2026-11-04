@@ -27,18 +27,20 @@ const KEEP_ALIVE_INTERVAL = 7500;
 const OPCODES = {
     "PONG": 300,
     "PING": 301,
-    "ENTER_PLACE": 401,
+    "ENTER_PLACE": 401,               // 0x0191
     "ENTER_CHILD_PLACE": 402,
     "CREATE_RULE": 405,
     "PLAYER_ENTERED": 406,
     "PLAYER_EXITED": 407,
+    "KICK_PLAYER": 410,
     "SLOT_IN_TABLE_CHANGED": 416,
     "START_MATCH": 417,
     "GAME_OVER": 418,
     "SET_TURN": 420,
     "SHOW_LUCKY_WHEEL": 424,
-    "SET_PLAYER_STATUS": 421,
+    "SET_PLAYER_STATUS": 421, // is ready
     "GET_CURRENT_PATH": 430,
+    "OWNER_CHANGED": 432,
     "PLAY": 502,
     "MOVE": 529,
     "LOGIN_FB_SIGNATURE2": 616
@@ -420,15 +422,23 @@ function createTable(betAmountId, tableArgs, tableName) {
     });
 }
 
+// Kick player off table
+function kickPlayer(playerId) {
+    return createMessage("KICK_PLAYER", msg => {
+        writeLong(playerId, msg);
+    });
+}
+
 // Get user avatar
 function getAvatar(response) {
     let url = null;
+    let cdnHost = "https://chesscdn.game8.io/";
     let avatarUrl = response.params.avatarUrl;
     let avatarId = response.params.avatarId;
     if (avatarUrl != null && avatarUrl !== "") {
         url = avatarUrl;
         if (!url.startsWith("http") && !url.startsWith("//")) url = cdnHost + url;
-    } else url = "https://chesscdn.game8.io/com/ftl/game/images/avatar/builtin" + avatarId + ".png";
+    } else url = cdnHost + "com/ftl/game/images/avatar/builtin" + avatarId + ".png";
     response.params.avatarUrl = url;
 }
 
@@ -454,6 +464,13 @@ function parseMessage(data) { // tableSlot is side to move, 0 - White; 1 -Black;
                 "starBalance": readLong(buf)
             }; break;
         case 407: response.command = "PLAYER_EXITED"; break;
+        case 410:
+            response.command = "KICK_PLAYER";
+            response.params = {
+                "status": readByte(buf),
+                "message": readString(buf)
+            };
+            break;
         case 416:
             response.command = "SLOT_IN_TABLE_CHANGED";
             response.params = {
@@ -515,6 +532,11 @@ function parseMessage(data) { // tableSlot is side to move, 0 - White; 1 -Black;
             response.params.cssOffset = readByte(buf);
             getAvatar(response);
             break;
+        case 432:
+            response.command = "OWNER_CHANGED";
+            response.params = {
+                "tableSlot": readByte(buf)
+            }; break;
         case 529:
             response.command = "MOVE";
             response.params = {
@@ -626,6 +648,10 @@ ipcMain.on("gui", (event, msg) => {
         let tableName = msg.params.tableName;
         let game = createTable(betAmountId, tableArgs, tableName);
         socket.send(game);
+    } else if (msg.command == "kick") {
+        let playerId = msg.params.playerId;
+        let kick = kickPlayer(playerId);
+        socket.send(kick);
     } else if (msg.command == "hex") {
         socket.send(Buffer.from(msg.params.data, "hex"));
     }

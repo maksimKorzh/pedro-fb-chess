@@ -6,6 +6,7 @@ var board = null, side = 0, lock = 0, src = "", dst = "";
 
 var intervalId;
 var whiteTime = 0, blackTime = 0, whiteCountdown = 0, blackCountdown = 0;
+var opponentId = 0;
 
 const coords = [
     "a1", "b1", "c1", "d1", "e1", "f1", "g1", "h1",
@@ -49,11 +50,17 @@ function stopInterval() {
 }
 
 function updateTimer() {
-  if (blackTime < 0 || whiteTime < 0 || whiteCountdown < 0 || blackCountdown < 0) return;
-  document.getElementById('black-clock').innerHTML = secToMin(blackTime);
-  document.getElementById('white-clock').innerHTML = secToMin(whiteTime);
-  document.getElementById('black-countdown').innerHTML = secToMin(blackCountdown);
-  document.getElementById('white-countdown').innerHTML = secToMin(whiteCountdown);
+    if (whiteCountdown > 0 && whiteTime <= 0) {
+        document.getElementById("stats").innerText = "Game starts in " + whiteCountdown + " sec, you may click \"start\"";
+        if (whiteCountdown == 1 && opponentId) {
+            let msg = createCommand("kick", {"playerId": opponentId});
+            window.fbchess.sendGUICommand(msg);
+        }
+    } if (blackTime < 0 || whiteTime < 0 || whiteCountdown < 0 || blackCountdown < 0) return;
+    document.getElementById('black-clock').innerHTML = secToMin(blackTime);
+    document.getElementById('white-clock').innerHTML = secToMin(whiteTime);
+    document.getElementById('black-countdown').innerHTML = secToMin(blackCountdown);
+    document.getElementById('white-countdown').innerHTML = secToMin(whiteCountdown);
 }
 
 function secToMin(sec) {
@@ -126,18 +133,22 @@ function unhighlight() {
     });
 }
 
-function setPlayer(color, playerName, playerElo, avatarUrl) {
+function setPlayer(color, playerId, playerName, playerElo, avatarUrl) {
     let avatar = document.getElementById(color + "-avatar");
     avatar.style.backgroundImage = avatarUrl ? `url("${avatarUrl}")` : "none";
     let name = document.getElementById(color + "-name");
     name.innerText = `${playerName}${(playerElo ? ("(" + playerElo + ")") : "")}`;
+    if (playerId != player.id) opponentId = playerId;
 }
 
 window.fbchess.onWebSocketMsg((data) => {
     // Logs
     console.log(data);
     
-    if (data.command.includes("WebSocket")) print(data.command + "\n");
+    if (data.command.includes("WebSocket")) {
+        document.getElementById("stats").innerText = "Connected to web socket";
+        print(data.command + "\n");
+    }
     
     // Update board
     if (data.command == "MOVE") {
@@ -157,7 +168,10 @@ window.fbchess.onWebSocketMsg((data) => {
             "id": data.params.playerId,
             "name": data.params.playerFullName,
             "slot": -1
-        }; print(`${player.name} logged in\n`)
+        };
+        
+        document.getElementById("stats").innerText = `${player.name} logged in`;
+        print(`${player.name} logged in\n`)
     }
     
     // Game started
@@ -165,7 +179,7 @@ window.fbchess.onWebSocketMsg((data) => {
         board.position("start");
         game = new Chess();
         unhighlight();
-        startInterval();
+        document.getElementById("stats").innerText = "Game in progress";
         print(`Game started\n`);
     }
     
@@ -173,6 +187,7 @@ window.fbchess.onWebSocketMsg((data) => {
     if (data.command == "GAME_OVER") {
         unhighlight();
         stopInterval();
+        document.getElementById("stats").innerText = "Game finished";
         print("Game finished\n");
     }
     
@@ -186,7 +201,7 @@ window.fbchess.onWebSocketMsg((data) => {
     
     // Player entered
     if (data.command == "PLAYER_EXITED") {
-        stopInterval();
+        //document.getElementById("stats").innerText = "Player exited";
         print("Player exited\n");
     }
     
@@ -207,9 +222,19 @@ window.fbchess.onWebSocketMsg((data) => {
         }
         if (playerName == "") print(`${color} slot is empty\n`);
         else print(`${(you ? "(you)" : "") + playerName}(${playerElo}) is ${color}\n`);
-        setPlayer(color, playerName, playerElo, avatarUrl);
+        setPlayer(color, playerId, playerName, playerElo, avatarUrl);
+        document.getElementById(color + "-avatar").playerId = playerId;
     }
     
+    // Ready state
+    if (data.command == "SET_PLAYER_STATUS") {
+        let TableSlot = data.params.tableSlot;
+        let color = "";
+        if (tableSlot == 0) color = "white";
+        if (tableSlot == 1) color = "black";
+        print(`${data.params.tableSlot} ${data.params.matchPoint}\n`);
+    }
+
     // Clock
     if (data.command == "SET_TURN") {
         let tableSlot = data.params.tableSlot;
@@ -229,6 +254,11 @@ window.fbchess.onWebSocketMsg((data) => {
                 blackTime = Math.floor(data.params.timeLeft / 1000);
                 blackCountdown = data.params.countdown;
             }
+        } else {
+            side = 0;
+            whiteTime = -100;
+            whiteCountdown = data.params.countdown;
+            startInterval();
         }
     }
 });
@@ -271,8 +301,8 @@ input.addEventListener("keydown", (e) => {
         } else if (cmd == "lobby") {
             let msg = createCommand("lobby");
             window.fbchess.sendGUICommand(msg);
-            setPlayer("white", "White Player", "", "");
-            setPlayer("black", "Black Player", "", "");
+            setPlayer("white", 0, "White Player", "", "");
+            setPlayer("black", 0, "Black Player", "", "");
             board.position("start");
             game = new Chess();
         } else if (cmd == "room") {
@@ -289,7 +319,7 @@ input.addEventListener("keydown", (e) => {
                 "tableName": ""
             }); window.fbchess.sendGUICommand(msg);
         } else if (cmd == "start") {
-            window.fbchess.sendGUICommand(createCommand("hex", {data: "012b"}));
+            window.fbchess.sendGUICommand(createCommand("hex", {data: "012b"})); // set ready
         } else if (cmd == "resign") {
             window.fbchess.sendGUICommand(createCommand("hex", {data: "0216"}));
         } else { // Send user move
@@ -311,14 +341,12 @@ input.addEventListener("keydown", (e) => {
 document.getElementById("game").addEventListener("click", function() {
     let msg = createCommand("lobby");
     window.fbchess.sendGUICommand(msg);
-    setPlayer("white", "White Player", "", "");
-    setPlayer("black", "Black Player", "", "");
+    setPlayer("white", 0, "White Player", "", "");
+    setPlayer("black", 0, "Black Player", "", "");
     board.position("start");
     game = new Chess();
-    
     msg = createCommand("room", {"roomId": "3"});
     window.fbchess.sendGUICommand(msg);
-    
     msg = createCommand("game", {
         "betAmountId": "2",
         "tableArgs": {
@@ -334,9 +362,10 @@ document.getElementById("game").addEventListener("click", function() {
 document.getElementById("lobby").addEventListener("click", function() {
     let msg = createCommand("lobby");
     window.fbchess.sendGUICommand(msg);
-    setPlayer("white", "White Player", "", "");
-    setPlayer("black", "Black Player", "", "");
+    setPlayer("white", 0, "White Player", "", "");
+    setPlayer("black", 0, "Black Player", "", "");
     board.position("start");
+    document.getElementById("start").innerText = "Start";
 });
 
 // Connect to server button
@@ -349,22 +378,47 @@ document.getElementById("connect").addEventListener("click", function() {
 document.getElementById("disconnect").addEventListener("click", function() {
     let msg = createCommand("disconnect");
     window.fbchess.sendGUICommand(msg);
+    stopInterval();
+    document.getElementById("start").innerText = "Start";
 });
 
 // Start button
 document.getElementById("start").addEventListener("click", function() {
-    let msg = createCommand("start");
-    window.fbchess.sendGUICommand(msg);
+    //let msg = createCommand("start");
+    //window.fbchess.sendGUICommand(msg);
+    window.fbchess.sendGUICommand(createCommand("hex", {data: "012b"})); // set ready
+    //stopInterval();
+    //document.getElementById("start").innerText = "Start";
 });
 
 // Resign button
 document.getElementById("resign").addEventListener("click", function() {
-    let msg = createCommand("resign");
-    window.fbchess.sendGUICommand(msg);
+    //let msg = createCommand("resign");
+    //window.fbchess.sendGUICommand(msg);
+    window.fbchess.sendGUICommand(createCommand("hex", {data: "0216"}));
 });
 
 // Stockfish button
 document.getElementById("stockfish").addEventListener("click", function() {
     window.fbchess.sendUCICommand(`position fen '${game.fen()}'`);
     window.fbchess.sendUCICommand("go time 1");
+});
+
+// Kick opponent
+document.getElementById("white-avatar").addEventListener("click", (i) => {
+    let playerId = i.target.playerId;
+    if (playerId != player.id) {
+        console.log("kick", player.id, playerId);        
+        let msg = createCommand("kick", {"playerId": playerId});
+        window.fbchess.sendGUICommand(msg);
+    }
+});
+
+document.getElementById("black-avatar").addEventListener("click", (i) => {
+    let playerId = i.target.playerId;
+    if (playerId != player.id) {
+        console.log("kick", player.id, playerId);        
+        let msg = createCommand("kick", {"playerId": playerId});
+        window.fbchess.sendGUICommand(msg);
+    }
 });

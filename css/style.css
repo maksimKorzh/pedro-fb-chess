@@ -252,10 +252,8 @@ button:focus {
 
 #stockfish {
     flex: 0 0 auto;
-    width: calc(100% - 12px);
+    width: 100%;
     min-height: 40px;
-    margin: 0 6px;
-
     font-size: 20px;
 }
 

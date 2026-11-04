@@ -3375,6 +3375,18 @@ window.createTable = function(e) {
     })
 }
 ,
+function encode(buf) { // debug by cmk
+    let str = "";
+    const result = new Int8Array(buf.length);
+    let offset = 0;
+    for (const chunk of buf.data) {
+        result.set(chunk, offset);
+        offset += chunk.length;
+    }
+    
+    result.forEach((i) => {str += i.toString(16).padStart(2, "0")})
+    return str;
+},
 window.doCreateTable = function(e, t, n, a) {
     var i = new OutboundMessage("CREATE_RULE");
     i.writeByte(parseInt(e));
@@ -3386,6 +3398,7 @@ window.doCreateTable = function(e, t, n, a) {
         i.writeAscii(o),
         i.writeString(t[o]);
     i.writeAscii(n),
+    console.log("\n\n MESSAGE:", encode(i))
     connection.send(i, function(n, i) {
         if (i) {
             var r = n.readAscii();
