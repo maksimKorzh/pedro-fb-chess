@@ -146,7 +146,7 @@ window.fbchess.onWebSocketMsg((data) => {
     console.log(data);
     
     if (data.command.includes("WebSocket")) {
-        document.getElementById("stats").innerText = "Connected to web socket";
+        document.getElementById("stats").innerText = data.command;
         print(data.command + "\n");
     }
     
@@ -201,7 +201,7 @@ window.fbchess.onWebSocketMsg((data) => {
     
     // Player entered
     if (data.command == "PLAYER_EXITED") {
-        //document.getElementById("stats").innerText = "Player exited";
+        document.getElementById("stats").innerText = "Player exited";
         print("Player exited\n");
     }
     
@@ -365,7 +365,7 @@ document.getElementById("lobby").addEventListener("click", function() {
     setPlayer("white", 0, "White Player", "", "");
     setPlayer("black", 0, "Black Player", "", "");
     board.position("start");
-    document.getElementById("start").innerText = "Start";
+    document.getElementById("stats").innerText = "...";;
 });
 
 // Connect to server button
@@ -374,12 +374,12 @@ document.getElementById("connect").addEventListener("click", function() {
     window.fbchess.sendGUICommand(msg);
 });
 
-// Disonnect to server button
+// Disonnect from server button
 document.getElementById("disconnect").addEventListener("click", function() {
     let msg = createCommand("disconnect");
     window.fbchess.sendGUICommand(msg);
     stopInterval();
-    document.getElementById("start").innerText = "Start";
+    document.getElementById("stats").innerText = "...";
 });
 
 // Start button
