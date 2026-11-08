@@ -33,6 +33,7 @@ const OPCODES = {
     "PLAYER_ENTERED": 406,
     "PLAYER_EXITED": 407,
     "KICK_PLAYER": 410,
+    "TABLE_IN_ROOM_CHANGED": 415,
     "SLOT_IN_TABLE_CHANGED": 416,
     "START_MATCH": 417,
     "GAME_OVER": 418,
@@ -52,8 +53,8 @@ if (DEBUG) {
         locale: 'en_GB',
         name: null,
         photo: null,
-        signature: '9gWawTmY_G9rZYXeLwS0kqyB8iSmTg5SJ0mIgHVGr-s.eyJhbGdvcml0aG0iOiJITUFDLVNIQTI1NiIsImlzc3VlZF9hdCI6MTc5MzcyNDQ3NCwicGxheWVyX2lkIjoiMjk0Njg5MjI2MjI3MDAxMjgiLCJyZXF1ZXN0X3BheWxvYWQiOiJoZWxsbyJ9',
-        timestamp: 1793724474825
+        signature: 'FkSdC6dMvchVq5kGJh2CV0D1M0-6yNAZiRKUEki_9U8.eyJhbGdvcml0aG0iOiJITUFDLVNIQTI1NiIsImlzc3VlZF9hdCI6MTc5NDEzMzcwNCwicGxheWVyX2lkIjoiMjk0Njg5MjI2MjI3MDAxMjgiLCJyZXF1ZXN0X3BheWxvYWQiOiJoZWxsbyJ9',
+        timestamp: 1794133705034
     };
 }
 
@@ -118,7 +119,7 @@ function fbLogin(win) {
                     fbCredentials = credentials;
                     console.log("Credentials stored globally:", fbCredentials);
                     clearInterval(interval);
-                    await win.loadFile("ui.html");
+                    await win.loadFile("lobby.html");
                     break;
                 }
             } catch (err) { console.log("Waiting for credentials:", err.message); }
@@ -471,6 +472,18 @@ function parseMessage(data) { // tableSlot is side to move, 0 - White; 1 -Black;
                 "message": readString(buf)
             };
             break;
+        case 415:
+            response.command = "TABLE_IN_ROOM_CHANGED";
+            response.params = {
+                "id": readShort(buf),
+                "name": readString(buf),
+                "type": readByte(buf),
+                "betAmountId": readByte(buf),
+                "slots": readByte(buf),
+                "playing": readByte(buf),
+                "private": readByte(buf),
+                "filter": readByte(buf),
+            }; break;
         case 416:
             response.command = "SLOT_IN_TABLE_CHANGED";
             response.params = {
@@ -614,7 +627,7 @@ function createWindow() {
         }
     ]; const menu = Menu.buildFromTemplate(template);
     Menu.setApplicationMenu(menu);
-    if (DEBUG) win.loadFile("ui.html");
+    if (DEBUG) win.loadFile("lobby.html");
     else fbLogin(win);
     win.maximize();
     win.on("close", () => { if (socket) socket.close(); });

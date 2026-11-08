@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Lobby</title>
+        <link rel="stylesheet" href="css/lobby.css">
+    </head>
+    <body>
+        <header class="header">
+            <h1>Lobby</h1>
+            <span class="status" id="connection-status">DISCONNECTED</span>
+        </header>
+        <main class="main">
+            <!-- ROOMS -->
+            <section class="panel rooms-panel">
+                <div class="panel-header">
+                    <h2>Rooms</h2>
+                    <!--span class="status" id="room-count">3 rooms</span-->
+                </div>
+                <div class="panel-content">
+                    <div class="room-list" id="room-list"></div>
+                </div>
+            </section>
+
+            <!-- RIGHT SIDE -->
+            <div class="right-content">
+                <!-- CREATE TABLE -->
+                <section class="panel create-section">
+                    <div class="panel-header">
+                        <h2>Create table</h2>
+                        <span class="status" id="selected-room">Classic</span>
+                    </div>
+                    <div style="padding: 10px 12px;">
+                        <button class="primary create-toggle" id="toggle-create">
+                            + Create new table
+                        </button>
+                    </div>
+                    <div class="create-form" id="create-form">
+                        <div class="form-grid">
+                            <div class="field">
+                                <label for="minutes">Minutes per match</label>
+                                <input id="minutes" type="number"
+                                       min="1" max="180" value="10">
+                            </div>
+
+                            <div class="field">
+                                <label for="seconds">Seconds per move</label>
+                                <input id="seconds" type="number"
+                                       min="0" max="120" value="0">
+                            </div>
+                            <div class="field">
+                                <label for="progressive">Seconds progressive</label>
+                                <input id="progressive" type="number"
+                                       min="0" max="60" value="0">
+                            </div>
+                            <div class="field">
+                                <label for="bet">Bet amount</label>
+                                <input id="bet" type="number"
+                                       min="0" step="any" value="0">
+                            </div>
+                        </div>
+                        <div class="create-actions">
+                            <button id="cancel-create">Cancel</button>
+                            <button class="primary" id="create-submit">
+                                Create table
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- CHALLENGES -->
+                <section class="panel challenges-section">
+                    <div class="panel-header">
+                        <h2>Challenges</h2>
+                        <span class="status" id="challenge-count">0 available</span>
+                    </div>
+                    <div class="panel-content">
+                        <div class="challenge-list" id="challenge-list">
+                            <!--div class="challenge">
+                                <div class="challenge-info">
+                                    <span class="challenge-name">Grandmaster Table #12</span>
+                                    <div class="challenge-details">
+                                        <span class="bet">Bet: 100</span>
+                                        <span class="side">White</span>
+                                    </div>
+                                </div>
+                                <div class="challenge-actions">
+                                    <button class="primary accept-challenge">
+                                        Accept
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="challenge">
+                                <div class="challenge-info">
+                                    <span class="challenge-name">Blitz Arena #04</span>
+                                    <div class="challenge-details">
+                                        <span class="bet">Bet: 50</span>
+                                        <span class="side">Black</span>
+                                    </div>
+                                </div>
+                                <div class="challenge-actions">
+                                    <button class="primary accept-challenge">
+                                        Accept
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="challenge">
+                                <div class="challenge-info">
+                                    <span class="challenge-name">Private Table #21</span>
+                                    <div class="challenge-details">
+                                        <span class="bet">Bet: 250</span>
+                                        <span class="side">White</span>
+                                    </div>
+                                </div>
+                                <div class="challenge-actions">
+                                    <button class="primary accept-challenge">
+                                        Accept
+                                    </button>
+                                </div>
+                            </div-->
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </body>
+    <script src="js/lobby.js"></script>
+</html>
