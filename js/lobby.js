@@ -30,7 +30,8 @@ var challenges = 0;
 let msg;
 function createCommand(command, params = {}) { return { command, params }; }
 
-// Connect to server
+// Reconnect to server
+msg = createCommand("disconnect"); window.fbchess.sendGUICommand(msg);
 msg = createCommand("connect"); window.fbchess.sendGUICommand(msg);
 
 // Logged user
@@ -49,7 +50,7 @@ function addRoom(id, name, tables, players, selected) {
                 <span>● ${players} players</span>
             </div>
         </div>
-    `;
+    `; document.getElementById(0).click();
 }
 
 // Add challenge
@@ -164,7 +165,6 @@ document.getElementById("cancel-create").addEventListener("click", () => {
 // CREATE TABLE
 document.getElementById("create-submit").addEventListener("click", () => {
     const params = {
-        room: selectedRoom,
         minutes: Number(document.getElementById("minutes").value),
         seconds: Number(document.getElementById("seconds").value),
         progressive: Number(document.getElementById("progressive").value),
@@ -187,9 +187,15 @@ document.getElementById("create-submit").addEventListener("click", () => {
 
     console.log("CREATE TABLE:", params);
 
-    // TODO: Send params to Electron / game server.
-
-    alert("Create table request:\n" + JSON.stringify(params, null, 2));
+    let msg = createCommand("game", {
+        "betAmountId": params.bet.toString(),
+        "tableArgs": {
+            "matchDuration": params.minutes.toString(),
+            "turnDuration": params.seconds.toString(),
+            "accDuration": params.progressive.toString()
+        },
+        "tableName": ""
+    }); window.fbchess.sendGUICommand(msg);
 
     createForm.classList.remove("open");
     toggleCreate.textContent = "+ Create new table";

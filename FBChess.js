@@ -9,6 +9,7 @@ const WebSocket = require("ws");
 // App globals
 var socket = null;
 var fbCredentials = null;
+var win = null;
 var engine = null;
 
 // App constants
@@ -53,8 +54,8 @@ if (DEBUG) {
         locale: 'en_GB',
         name: null,
         photo: null,
-        signature: 'FkSdC6dMvchVq5kGJh2CV0D1M0-6yNAZiRKUEki_9U8.eyJhbGdvcml0aG0iOiJITUFDLVNIQTI1NiIsImlzc3VlZF9hdCI6MTc5NDEzMzcwNCwicGxheWVyX2lkIjoiMjk0Njg5MjI2MjI3MDAxMjgiLCJyZXF1ZXN0X3BheWxvYWQiOiJoZWxsbyJ9',
-        timestamp: 1794133705034
+        signature: 'LDwk_lOoTfMATygPXiqupi-sHQDhumQ_tLbVEoRWHuI.eyJhbGdvcml0aG0iOiJITUFDLVNIQTI1NiIsImlzc3VlZF9hdCI6MTc5NDE0NTgwMywicGxheWVyX2lkIjoiMjk0Njg5MjI2MjI3MDAxMjgiLCJyZXF1ZXN0X3BheWxvYWQiOiJoZWxsbyJ9',
+        timestamp: 1794145803927
     };
 }
 
@@ -609,7 +610,7 @@ function parseMessage(data) { // tableSlot is side to move, 0 - White; 1 -Black;
 
 // Main window
 function createWindow() {
-    const win = new BrowserWindow({
+    win = new BrowserWindow({
         fullscreen: false,
         width: 1024,
         minWidth:1024,
@@ -650,17 +651,28 @@ ipcMain.on("gui", (event, msg) => {
         let path = getCurrentPath();
         socket.send(path);
     } else if (msg.command == "lobby") {
-        let lobby = enterPlace("Lobby.chess");
-        socket.send(lobby);
+        if (!win.webContents.getURL().includes("lobby.html")) {
+            win.loadFile("lobby.html").then(() => {
+                let lobby = enterPlace("Lobby.chess");
+                socket.send(lobby);
+            });
+        } else {
+            let lobby = enterPlace("Lobby.chess");
+            socket.send(lobby);
+        }
     } else if (msg.command == "room") {
         let room = enterChildPlace(msg.params.roomId);
         socket.send(room);
     } else if (msg.command == "game") {
-        let betAmountId = msg.params.betAmountId;
-        let tableArgs = msg.params.tableArgs;
-        let tableName = msg.params.tableName;
-        let game = createTable(betAmountId, tableArgs, tableName);
-        socket.send(game);
+        if (!win.webContents.getURL().includes("game.html")) {
+            win.loadFile("game.html").then(() => {
+                let betAmountId = msg.params.betAmountId;
+                let tableArgs = msg.params.tableArgs;
+                let tableName = msg.params.tableName;
+                let game = createTable(betAmountId, tableArgs, tableName);
+                socket.send(game);
+            });
+        }
     } else if (msg.command == "kick") {
         let playerId = msg.params.playerId;
         let kick = kickPlayer(playerId);

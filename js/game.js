@@ -150,6 +150,15 @@ window.fbchess.onWebSocketMsg((data) => {
         print(data.command + "\n");
     }
     
+    // Create new game
+    /*if (data.command == "CREATE_RULE") {
+        let msg = createCommand("game", {
+            "betAmountId": data.params.betAmountId.toString(),
+            "tableArgs": data.params.tableArgs,
+            "tableName": data.params.tableName
+        }); window.fbchess.sendGUICommand(msg);
+    }*/
+    
     // Update board
     if (data.command == "MOVE") {
         let src = data.params.src;
@@ -338,7 +347,7 @@ input.addEventListener("keydown", (e) => {
 });
 
 // Create new table button
-document.getElementById("game").addEventListener("click", function() {
+/*document.getElementById("game").addEventListener("click", function() {
     let msg = createCommand("lobby");
     window.fbchess.sendGUICommand(msg);
     setPlayer("white", 0, "White Player", "", "");
@@ -356,20 +365,20 @@ document.getElementById("game").addEventListener("click", function() {
         },
         "tableName": ""
     }); window.fbchess.sendGUICommand(msg);
-});
+});*/
 
 // Enter lobby button
 document.getElementById("lobby").addEventListener("click", function() {
     let msg = createCommand("lobby");
     window.fbchess.sendGUICommand(msg);
-    setPlayer("white", 0, "White Player", "", "");
+    /*setPlayer("white", 0, "White Player", "", "");
     setPlayer("black", 0, "Black Player", "", "");
     board.position("start");
-    document.getElementById("stats").innerText = "...";;
+    document.getElementById("stats").innerText = "...";*/
 });
 
 // Connect to server button
-document.getElementById("connect").addEventListener("click", function() {
+/*document.getElementById("connect").addEventListener("click", function() {
     let msg = createCommand("connect");
     window.fbchess.sendGUICommand(msg);
 });
@@ -380,7 +389,7 @@ document.getElementById("disconnect").addEventListener("click", function() {
     window.fbchess.sendGUICommand(msg);
     stopInterval();
     document.getElementById("stats").innerText = "...";
-});
+});*/
 
 // Start button
 document.getElementById("start").addEventListener("click", function() {
