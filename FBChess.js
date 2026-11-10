@@ -34,6 +34,7 @@ const OPCODES = {
     "PLAYER_ENTERED": 406,
     "PLAYER_EXITED": 407,
     "KICK_PLAYER": 410,
+    "GET_TABLE_DATA": 414,            // 0x019e
     "TABLE_IN_ROOM_CHANGED": 415,
     "SLOT_IN_TABLE_CHANGED": 416,
     "START_MATCH": 417,
@@ -54,8 +55,8 @@ if (DEBUG) {
         locale: 'en_GB',
         name: null,
         photo: null,
-        signature: 'LDwk_lOoTfMATygPXiqupi-sHQDhumQ_tLbVEoRWHuI.eyJhbGdvcml0aG0iOiJITUFDLVNIQTI1NiIsImlzc3VlZF9hdCI6MTc5NDE0NTgwMywicGxheWVyX2lkIjoiMjk0Njg5MjI2MjI3MDAxMjgiLCJyZXF1ZXN0X3BheWxvYWQiOiJoZWxsbyJ9',
-        timestamp: 1794145803927
+        signature: 'SpIHpC-n_x24fSNMVt4lbg8oAsDPARhGqSLVkyeCUS8.eyJhbGdvcml0aG0iOiJITUFDLVNIQTI1NiIsImlzc3VlZF9hdCI6MTc5NDMxODg2NCwicGxheWVyX2lkIjoiMjk0Njg5MjI2MjI3MDAxMjgiLCJyZXF1ZXN0X3BheWxvYWQiOiJoZWxsbyJ9',
+        timestamp: 1794318865216
     };
 }
 
@@ -135,7 +136,10 @@ function connect(sender) {
         let login = loginFbSignature2();
         socket.send(login);
         sender.send("websocket", { "command": "Connected to WebSocket" });
-        setInterval(function() { socket.send(keepAlive()); }, KEEP_ALIVE_INTERVAL);
+        setInterval(function() {
+            try { socket.send(keepAlive()); }
+            catch(e) {}
+        }, KEEP_ALIVE_INTERVAL);
     }); socket.on("message", function (data) { sender.send("websocket", parseMessage(data)); });
     socket.on("error", function (error) { sender.send("websocket", { "command": "WebSocket Error" }); });
     socket.on("close", function () { sender.send("websocket", { "command": "WebSocket connection closed" }); }); return socket;
@@ -393,6 +397,16 @@ function getCurrentPath() {
     });
 }
 
+// Get table data
+function getTableData(roomId, tableId) {
+    return createMessage("GET_TABLE_DATA", msg => {
+        writeAscii("Lobby.chess." + roomId + "." + tableId, msg);
+    });
+    
+    //         L  o  b  b  y  .  c  h  e  s  s  .  5  .  8 6 3 7
+    // 019e 12 4c 6f 62 62 79 2e 63 68 65 73 73 2e 35 2e 38363337
+}
+
 // Enter place
 function enterPlace(placePath) {
     return createMessage("ENTER_PLACE", msg => {
@@ -444,7 +458,7 @@ function getAvatar(response) {
     response.params.avatarUrl = url;
 }
 
-// Parse web socket message
+// Parse message from web socket
 function parseMessage(data) { // tableSlot is side to move, 0 - White; 1 -Black; -2 None;
     let response = { "command": "", "params": {} };
     let buf = { "data": data, "offset": 0 };
@@ -473,6 +487,24 @@ function parseMessage(data) { // tableSlot is side to move, 0 - White; 1 -Black;
                 "message": readString(buf)
             };
             break;
+        case 414:
+            response.command = "GET_TABLE_DATA";
+            readByte(buf); // offset
+            response.params = { "ownerId": readLong(buf), "players": [] };
+            let playerCount = readByte(buf);
+            for (let i = 0; i < playerCount; i++) {
+                let player = {
+                    "playerId": readLong(buf),
+                    "playerName": readString(buf),
+                    "avatarUrl": readAscii(buf),
+                    "avatarId": readShort(buf),
+                    "chipBalance": readLong(buf),
+                    "starBalance": readLong(buf),
+                    "playerEloRating": readLong(buf),
+                    "?": readByte(buf)
+                }; getAvatar({"params": player});
+                response.params.players.push(player);
+            } break;
         case 415:
             response.command = "TABLE_IN_ROOM_CHANGED";
             response.params = {
@@ -660,12 +692,31 @@ ipcMain.on("gui", (event, msg) => {
             let lobby = enterPlace("Lobby.chess");
             socket.send(lobby);
         }
-    } else if (msg.command == "room") {
+    } else if (msg.command == "join") {
+        win.loadFile("game.html").then(() => {
+            setTimeout(function() {
+                event.sender.send("websocket", {"command": "ID_INFO", "params": {
+                    "playerId": msg.params.playerId,
+                    "roomId": msg.params.roomId,
+                    "tableId": msg.params.tableId
+                }}); let table = getTableData(msg.params.roomId, msg.params.tableId); socket.send(table);
+                let join = enterPlace(`Lobby.chess.${msg.params.roomId}.${msg.params.tableId}`); socket.send(join);
+                socket.send(table); // one more time to update avatars
+                socket.send(Buffer.from("013a01", "hex")); // set client mode 1 (play)
+            }, 100);
+        });
+    } else if (msg.command == "room") { // 01920135000000 take place
         let room = enterChildPlace(msg.params.roomId);
         socket.send(room);
     } else if (msg.command == "game") {
         if (!win.webContents.getURL().includes("game.html")) {
             win.loadFile("game.html").then(() => {
+                setTimeout(function() {event.sender.send("websocket", {"command": "ID_INFO", "params": {
+                        "playerId": msg.params.playerId,
+                        "roomId": -1,
+                        "tableId": -1
+                    }
+                })}, 100);
                 let betAmountId = msg.params.betAmountId;
                 let tableArgs = msg.params.tableArgs;
                 let tableName = msg.params.tableName;
@@ -673,6 +724,9 @@ ipcMain.on("gui", (event, msg) => {
                 socket.send(game);
             });
         }
+    } else if (msg.command == "table") {
+        let table = getTableData(msg.params.roomId, msg.params.tableId);
+        socket.send(table);
     } else if (msg.command == "kick") {
         let playerId = msg.params.playerId;
         let kick = kickPlayer(playerId);
@@ -684,5 +738,3 @@ ipcMain.on("gui", (event, msg) => {
     console.log(`UCI: ${msg}`)
     engine.stdin.write(msg + "\n");
 });
-
-

@@ -26,6 +26,7 @@ const BET = {
     "14": 0
 };
 
+var roomId = 0;
 var challenges = 0;
 let msg;
 function createCommand(command, params = {}) { return { command, params }; }
@@ -59,20 +60,20 @@ function addChallenge(id, name, bet, slots, playing, invite) {
         document.getElementById("challenge-list").innerHTML = "";
         challenges = 0;
         return;
-    } document.getElementById("challenge-list").innerHTML += `
+    } if (slots < 2) document.getElementById("challenge-list").innerHTML += `
         <div class="challenge">
             <div class="challenge-info">
                 <span class="challenge-name">${name}</span>
                 <div class="challenge-details">
                     <span class="id tag">${id}</span>
                     <span class="players tag">${slots} players</span>
-                    <span class="playing tag">${playing ? "in progress" : "available"}</span>
+                    <span class="playing tag">${playing ? "in progress" : "idle"}</span>
                     <span class="invite tag">${invite ? "private" : "public"}</span>
                     <span class="bet">Bet: ${BET[bet]}</span>
                 </div>
             </div>
             <div class="challenge-actions">
-                <button class="primary accept-challenge">Accept</button>
+                <button class="primary accept-challenge">${slots < 2 ? "Play" : "View"}</button>
             </div>
         </div>
     `; challenges++;
@@ -141,11 +142,11 @@ roomList.addEventListener("click", event => {
     room.querySelector(".room-status").textContent = "Selected";
     selectedRoom = room.dataset.room;
     document.getElementById("selected-room").textContent = selectedRoom;
-    console.log("room", room.id);
     
     // Enter room
     msg = createCommand("lobby"); window.fbchess.sendGUICommand(msg);
     msg = createCommand("room", {"roomId": room.id}); window.fbchess.sendGUICommand(msg);
+    roomId = room.id;
     document.getElementById("challenge-list").innerHTML = "";
 });
 
@@ -188,6 +189,7 @@ document.getElementById("create-submit").addEventListener("click", () => {
     console.log("CREATE TABLE:", params);
 
     let msg = createCommand("game", {
+        "playerId": player.id,
         "betAmountId": params.bet.toString(),
         "tableArgs": {
             "matchDuration": params.minutes.toString(),
@@ -207,17 +209,15 @@ challengeList.addEventListener("click", event => {
     if (!button) return;
     const challenge = button.closest(".challenge");
     const params = {
-
-        id: challenge.querySelector(".id").textContent,
+        tableId: challenge.querySelector(".id").textContent,
         players: challenge.querySelector(".players").textContent,
         playing: challenge.querySelector(".playing").textContent,
         invite: challenge.querySelector(".invite").textContent,
         bet: challenge.querySelector(".bet").textContent
-    };
-
-    console.log("ACCEPT CHALLENGE:", params);
-
-    // TODO: Send acceptance request to Electron / game server.
-
-    alert("Accept challenge:\n" + JSON.stringify(params, null, 2));
+    }; msg = createCommand("join", {
+        "playerId": player.id,
+        "roomId": roomId,
+        "tableId": params.tableId
+    });
+    window.fbchess.sendGUICommand(msg);
 });
