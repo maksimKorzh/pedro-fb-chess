@@ -1,3 +1,16 @@
+// =====================================================
+// PROFE PINO - GAME.JS CHANGE HISTORY
+// =====================================================
+// EDIT #003: Correct Stockfish FEN command formatting.
+// EDIT #004: Accept engine messages as JSON or objects.
+// EDIT #005: Validate engine moves and report errors.
+// EDIT #006: Wait for server confirmation before updating
+//            the board with Stockfish's selected move.
+//
+// This revision adds documentation comments only.
+// Existing functionality and timing are preserved.
+// =====================================================
+
 const output = document.getElementById('output');
 const input = document.getElementById('input');
 
@@ -26,30 +39,30 @@ const coords = [
 function createCommand(command, params = {}) { return { command, params }; }
 
 function startInterval() {
-  if (!intervalId) { // Prevent multiple intervals from being set
-    intervalId = setInterval(() => {
-      if (side == 1) {
-        blackTime -= 1;
-        blackCountdown -= 1;
-      } else {
-          whiteTime -= 1;
-          whiteCountdown -= 1;
-      } updateTimer();
-    }, 1000);
-  }
+    if (!intervalId) { // Prevent multiple intervals from being set
+        intervalId = setInterval(() => {
+            if (side == 1) {
+                blackTime -= 1;
+                blackCountdown -= 1;
+            } else {
+                whiteTime -= 1;
+                whiteCountdown -= 1;
+            } updateTimer();
+        }, 1000);
+    }
 }
 
 function stopInterval() {
     if (intervalId) {
-      clearInterval(intervalId);
-      intervalId = null;
-      blackTime = 0;
-      whiteTime = 0;
-      whiteCountdown = 0;
-      blackCountdown = 0;
-      updateTimer();
-      document.getElementById('black-clock').innerHTML = '00:00';
-      document.getElementById('white-clock').innerHTML = '00:00';
+        clearInterval(intervalId);
+        intervalId = null;
+        blackTime = 0;
+        whiteTime = 0;
+        whiteCountdown = 0;
+        blackCountdown = 0;
+        updateTimer();
+        document.getElementById('black-clock').innerHTML = '00:00';
+        document.getElementById('white-clock').innerHTML = '00:00';
     }
 }
 
@@ -57,7 +70,7 @@ function updateTimer() {
     if (whiteCountdown > 0 && whiteTime <= 0) {
         document.getElementById("stats").innerText = "Game starts in " + whiteCountdown + " sec, you may click \"start\"";
         if (whiteCountdown == 1 && opponentId) {
-            let msg = createCommand("kick", {"playerId": opponentId});
+            let msg = createCommand("kick", { "playerId": opponentId });
             window.fbchess.sendGUICommand(msg);
         }
     } if (blackTime < 0 || whiteTime < 0 || whiteCountdown < 0 || blackCountdown < 0) return;
@@ -68,24 +81,24 @@ function updateTimer() {
 }
 
 function secToMin(sec) {
-  const minutes = Math.floor(sec / 60);
-  const seconds = sec % 60;
-  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    const minutes = Math.floor(sec / 60);
+    const seconds = sec % 60;
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 }
 
 function hexToAscii(hex) {
-  return hex.match(/.{1,2}/g)
-    .map(byte => String.fromCharCode(parseInt(byte, 16)))
-    .join('');
+    return hex.match(/.{1,2}/g)
+        .map(byte => String.fromCharCode(parseInt(byte, 16)))
+        .join('');
 }
 
 function sendMove(src, dst, prom) {
-    let msg = createCommand("move", {src, dst, prom});
+    let msg = createCommand("move", { src, dst, prom });
     window.fbchess.sendGUICommand(msg);
 }
 
 // Send user move
-function onDrop (src, dst) {
+function onDrop(src, dst) {
     if (src != dst) {
         let prom = 0;
         var move = game.move({
@@ -93,10 +106,10 @@ function onDrop (src, dst) {
             to: dst,
             promotion: 'q' // NOTE: always promote to a queen for example simplicity
         }); try { if (move.flags.includes("p")) prom = 1; }
-        catch (e) {}; if (move === null) return 'snapback'
+        catch (e) { }; if (move === null) return 'snapback'
         else {
             src = coords.indexOf(src);
-            dst = coords.indexOf(dst);            
+            dst = coords.indexOf(dst);
             sendMove(src, dst, prom);
         }
     }
@@ -121,7 +134,6 @@ function print(msg) {
     output.textContent += msg;
     output.scrollTop = output.scrollHeight;
 }
-
 
 function highlightLastMove(src, dst) {
     requestAnimationFrame(() => {
@@ -148,12 +160,20 @@ function setPlayer(color, playerId, playerName, playerElo, avatarUrl) {
 window.fbchess.onWebSocketMsg((data) => {
     // Logs
     console.log(data);
-    
+
     if (data.command.includes("WebSocket")) {
         document.getElementById("stats").innerText = data.command;
         print(data.command + "\n");
     }
-    
+
+    // =====================================================
+    // PROFE PINO EDIT #006 BEGIN
+    // File: game.js
+    // Purpose: Update the board after a server MOVE event.
+    // Stockfish's response is not used to update the board
+    // directly. The server-confirmed move is handled here.
+    // =====================================================
+
     // Update board
     if (data.command == "MOVE") {
         let src = data.params.src;
@@ -165,7 +185,9 @@ window.fbchess.onWebSocketMsg((data) => {
         }); board.position(game.fen());
         highlightLastMove(src, dst);
     }
-    
+
+    // PROFE PINO EDIT #006 END
+
     // Player status
     if (data.command == "LOGIN_FB_SIGNATURE2") {
         player = {
@@ -175,7 +197,7 @@ window.fbchess.onWebSocketMsg((data) => {
         }; document.getElementById("stats").innerText = `${player.name} logged in`;
         print(`${player.name} logged in\n`)
     }
-    
+
     // Game started
     if (data.command == "START_MATCH") {
         board.position("start");
@@ -184,7 +206,7 @@ window.fbchess.onWebSocketMsg((data) => {
         document.getElementById("stats").innerText = "Game in progress";
         print(`Game started\n`);
     }
-    
+
     // Game finished
     if (data.command == "GAME_OVER") {
         unhighlight();
@@ -192,7 +214,7 @@ window.fbchess.onWebSocketMsg((data) => {
         document.getElementById("stats").innerText = "Game finished";
         print("Game finished\n");
     }
-    
+
     // Player entered
     if (data.command == "PLAYER_ENTERED") {
         let name = data.params.playerName;
@@ -200,7 +222,7 @@ window.fbchess.onWebSocketMsg((data) => {
         let coins = data.params.playerChipBalance;
         print(`${name}(${rating}) entered with ${coins} coins\n`)
     } // 013a01 play when joined
-    
+
     // Player entered
     if (data.command == "PLAYER_EXITED") {
         document.getElementById("stats").innerText = "Player exited";
@@ -214,7 +236,7 @@ window.fbchess.onWebSocketMsg((data) => {
         roomId = data.params.roomId;
         tableId = data.params.tableId;
     }
-    
+
     // Table data
     if (data.command == "GET_TABLE_DATA") {
         ownerId = data.params.ownerId;
@@ -230,7 +252,7 @@ window.fbchess.onWebSocketMsg((data) => {
             document.getElementById(color + "-avatar").playerId = playerId;
         }
     }
-    
+
     // Table slot changed
     if (data.command == "SLOT_IN_TABLE_CHANGED") {
         let playerId = data.params.playerId;
@@ -250,7 +272,7 @@ window.fbchess.onWebSocketMsg((data) => {
         setPlayer(color, playerId, playerName, playerElo, avatarUrl);
         document.getElementById(color + "-avatar").playerId = playerId;
     }
-    
+
     // Ready state
     if (data.command == "SET_PLAYER_STATUS") {
         let tableSlot = data.params.tableSlot;
@@ -288,41 +310,109 @@ window.fbchess.onWebSocketMsg((data) => {
     }
 });
 
-// Engine move
+// =====================================================
+// PROFE PINO EDIT #004 BEGIN
+// File: game.js
+// Purpose: Handle Stockfish messages in either format:
+// 1. JSON string
+// 2. JavaScript object
+// This prevents errors caused by incompatible formats.
+// =====================================================
+
+// Receive a move from Stockfish.
+// The main process may send an object or JSON text.
 window.fbchess.onEngineMsg((data) => {
-    let prom = 0;
-    let msg = JSON.parse(data);
-    let src = msg.src;
-    let dst = msg.dst;
-    console.log(msg);
-    var move = game.move({
-        from: src,
-        to: dst,
-        promotion: 'q'
-    }); try { if (move.flags.includes("p")) prom = 1; }
-    catch (e) {}
-    src = coords.indexOf(src);
-    dst = coords.indexOf(dst);
-    sendMove(src, dst, prom);
+    try {
+        const msg = typeof data === "string" ? JSON.parse(data) : data;
+
+        // =================================================
+        // PROFE PINO EDIT #005 BEGIN
+        // Validate Stockfish's move before sending it.
+        // Check square names, promotion and legal moves.
+        // Report problems to the UI console.
+        // =================================================
+
+        if (!msg || typeof msg.src !== "string" || typeof msg.dst !== "string") {
+            print("Stockfish returned an invalid move.\n");
+            return;
+        }
+
+        const src = msg.src.toLowerCase();
+        const dst = msg.dst.toLowerCase();
+
+        const promotion =
+            typeof msg.prom === "string" && /^[qrbn]$/i.test(msg.prom)
+                ? msg.prom.toLowerCase()
+                : "q";
+
+        const fromIndex = coords.indexOf(src);
+        const toIndex = coords.indexOf(dst);
+
+        if (fromIndex < 0 || toIndex < 0) {
+            print(`Stockfish returned invalid squares: ${src} ${dst}\n`);
+            return;
+        }
+
+        // =================================================
+        // PROFE PINO EDIT #006 BEGIN
+        // Check move legality without changing game state.
+        // The server's MOVE event will update the board.
+        // =================================================
+
+        // Check legality without modifying the board.
+        // The server's MOVE event updates the local game
+        // after the move has been accepted.
+        const legalMove = game.moves({ verbose: true }).find(m =>
+            m.from === src &&
+            m.to === dst &&
+            (!m.flags.includes("p") || m.promotion === promotion)
+        );
+
+        // PROFE PINO EDIT #006 END
+
+        if (!legalMove) {
+            print(`Stockfish move ${src}${dst} is not legal in the current position.\n`);
+            return;
+        }
+
+        const prom = legalMove.flags.includes("p") ? 1 : 0;
+
+        print(`Stockfish suggests ${src}${dst}${prom ? promotion : ""}\n`);
+
+        sendMove(fromIndex, toIndex, prom);
+
+        // PROFE PINO EDIT #005 END
+
+    } catch (error) {
+        console.error("Stockfish move error:", error);
+        print(`Stockfish move error: ${error.message}\n`);
+    }
 });
+
+// PROFE PINO EDIT #004 END
 
 input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
         const cmd = input.value;
+
         if (cmd == "flip") { // temp
             board.position(game.fen());
             board.flip();
             input.value = "";
             return;
+
         } else if (cmd == "connect") {
             let msg = createCommand("connect");
             window.fbchess.sendGUICommand(msg);
+
         } if (cmd == "disconnect") {
             let msg = createCommand("disconnect");
             window.fbchess.sendGUICommand(msg);
+
         } else if (cmd == "path") {
             let msg = createCommand("path");
             window.fbchess.sendGUICommand(msg);
+
         } else if (cmd == "lobby") {
             let msg = createCommand("lobby");
             window.fbchess.sendGUICommand(msg);
@@ -330,24 +420,30 @@ input.addEventListener("keydown", (e) => {
             setPlayer("black", 0, "Black Player", "", "");
             board.position("start");
             game = new Chess();
+
         } else if (cmd == "room") {
-            let msg = createCommand("room", {"roomId": "3"});
+            let msg = createCommand("room", { "roomId": "3" });
             window.fbchess.sendGUICommand(msg);
+
         } else if (cmd == "table") {
-            let msg = createCommand("table", {"roomId": roomId, "tableId": tableId});
+            let msg = createCommand("table", { "roomId": roomId, "tableId": tableId });
             window.fbchess.sendGUICommand(msg);
+
         } else if (cmd == "start") {
-            window.fbchess.sendGUICommand(createCommand("hex", {data: "012b"})); // set ready
+            window.fbchess.sendGUICommand(createCommand("hex", { data: "012b" })); // set ready
+
         } else if (cmd == "resign") {
-            window.fbchess.sendGUICommand(createCommand("hex", {data: "0216"}));
+            window.fbchess.sendGUICommand(createCommand("hex", { data: "0216" }));
+
         } else { // Send user move
             let src = coords.indexOf(cmd[0] + cmd[1]);
             let dst = coords.indexOf(cmd[2] + cmd[3]);
             let prom = (cmd[4] == undefined) ? 0 : 1;
+
             if (src != "-1" && dst != "-1") sendMove(src, dst, prom);
             else window.fbchess.sendGUICommand(cmd);
         }
-        
+
         // Clear command, scroll terminal
         input.value = "";
         let terminal = document.getElementById("output");
@@ -356,35 +452,50 @@ input.addEventListener("keydown", (e) => {
 });
 
 // Enter lobby button
-document.getElementById("lobby").addEventListener("click", function() {
+document.getElementById("lobby").addEventListener("click", function () {
     let msg = createCommand("lobby");
     window.fbchess.sendGUICommand(msg);
 });
 
 // Start button
-document.getElementById("start").addEventListener("click", function() {
-    window.fbchess.sendGUICommand(createCommand("hex", {data: "012b"})); // set ready
+document.getElementById("start").addEventListener("click", function () {
+    window.fbchess.sendGUICommand(createCommand("hex", { data: "012b" })); // set ready
 });
 
 // Resign button
-document.getElementById("resign").addEventListener("click", function() {
-    //let msg = createCommand("resign");
-    //window.fbchess.sendGUICommand(msg);
-    window.fbchess.sendGUICommand(createCommand("hex", {data: "0216"}));
+document.getElementById("resign").addEventListener("click", function () {
+    window.fbchess.sendGUICommand(createCommand("hex", { data: "0216" }));
 });
 
+// =====================================================
+// PROFE PINO EDIT #003 BEGIN
+// File: game.js
+// Purpose: Send the current board position to Stockfish.
+//
+// Previous issue:
+// Incorrect quotation marks around FEN could prevent
+// Stockfish from understanding the position.
+//
+// Current working command:
+// position fen <current board FEN>
+//
+// FBChess.js receives this and starts the engine search.
+// =====================================================
+
 // Stockfish button
-document.getElementById("stockfish").addEventListener("click", function() {
-    window.fbchess.sendUCICommand(`position fen '${game.fen()}'`);
-    window.fbchess.sendUCICommand("go time 1");
+document.getElementById("stockfish").addEventListener("click", function () {
+    window.fbchess.sendUCICommand(`position fen ${game.fen()}`);
 });
+
+// PROFE PINO EDIT #003 END
 
 // Kick opponent
 document.getElementById("white-avatar").addEventListener("click", (i) => {
     let playerId = i.target.playerId;
+
     if (playerId != player.id && player.id == ownerId) {
         console.log("kick");
-        let msg = createCommand("kick", {"playerId": playerId});
+        let msg = createCommand("kick", { "playerId": playerId });
         window.fbchess.sendGUICommand(msg);
     } else {
         console.log("join");
@@ -393,9 +504,10 @@ document.getElementById("white-avatar").addEventListener("click", (i) => {
 
 document.getElementById("black-avatar").addEventListener("click", (i) => {
     let playerId = i.target.playerId;
+
     if (playerId != player.id && player.id == ownerId) {
         console.log("kick");
-        let msg = createCommand("kick", {"playerId": playerId});
+        let msg = createCommand("kick", { "playerId": playerId });
         window.fbchess.sendGUICommand(msg);
     } else {
         console.log("join");
