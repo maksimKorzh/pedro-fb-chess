@@ -49,7 +49,9 @@ const OPCODES = {
     "OWNER_CHANGED": 432,
     "PLAY": 502,
     "MOVE": 529,
-    "LOGIN_FB_SIGNATURE2": 616
+    "LOGIN_FB_SIGNATURE2": 616,
+    "CONTEST.ENTER": 641,
+    "CONTEST.LIST": 645
 };
 
 if (DEBUG) {
@@ -434,7 +436,7 @@ function fbLogin(win) {
 
                     clearInterval(interval);
 
-                    await win.loadFile("lobby.html");
+                    await win.loadFile("menu.html");
                     break;
                 }
 
@@ -881,6 +883,10 @@ function kickPlayer(playerId) {
     });
 }
 
+function getTournaments() {
+  return createMessage("CONTEST.LIST");
+}
+
 /*******************************
          MESSAGE PARSING
 *******************************/
@@ -1212,10 +1218,24 @@ function parseMessage(data) {
                 (1 == readByte(buf));
 
             break;
+        case 645:
+            readByte(buf);
+            response.command = "CONTEST.LIST";
+            response.params = {
+                "availableTournaments?": readByte(buf),
+                "unknownLong": readLong(buf),
+                "name": readAscii(buf)
+            };
+            break;
     }
 
     return response;
 }
+
+// CMK: PLEASE KEEP IT FOR NOW, I'LL REMOVE IT LATER
+let p = parseMessage(Buffer.from("028500010000000000000f65113239353235313638373330353036323034000001a1eca3cc00001d005400680061006e006b00730067006900760069006e006700200046006500730074006900760061006c002000320030003200360020005700330135007b0020002200700068006f0074006f0022003a0020002200680074007400700073003a002f002f00630064006e002e00670061006d006500760068002e006d0065002f00750070006c006f00610064002f0066006200690067002f00630068006500730073002f007400680061006e006b00730031002e0070006e00670022002c00200022006700750069006400650022003a0020002200680074007400700073003a002f002f00630064006e002e00670061006d006500760068002e006d0065002f00750070006c006f00610064002f0066006200690067002f00630068006500730073002f00670075006900640065005f002400740079007000650024005f0024006c006f00630061006c00650024002e00680074006d006c003f007600310022002c00200022006d0061007400630068002d006d0061006b0069006e00670022003a0020007b0020002200640022003a002000310030002c0020002200730022003a0020003300300020007d002c00200022006d00610074006300680022003a0020007b0020002200640065006e006f006d0069006e006100740069006f006e0022003a00200033002c00200022006d0061007400630068004400750072006100740069006f006e0022003a0020002200350022002c00200022007400750072006e004400750072006100740069006f006e0022003a00200022003300300022002c00200022006100630063004400750072006100740069006f006e0022003a0020002200300022002c0020002200660069007200730074005400750072006e004400750072006100740069006f006e0022003a002000220039003000220020007d0020007d00", "hex"));
+console.log(p);
+
 /*******************************
               UI
 *******************************/
@@ -1259,7 +1279,7 @@ function createWindow() {
     Menu.setApplicationMenu(menu);
 
     if (DEBUG) {
-        win.loadFile("lobby.html");
+        win.loadFile("menu.html");
     } else {
         fbLogin(win);
     }
@@ -1345,6 +1365,13 @@ ipcMain.on("gui", (event, msg) => {
             socket.send(pathMessage);
         }
 
+    } else if (msg.command == "tournaments") {
+        if (!win.webContents.getURL().includes("tournaments.html")) {
+            win.loadFile("tournaments.html");
+        } else {
+          let list = getTournaments();
+          socket.send(list);
+        }
     } else if (msg.command == "lobby") {
         if (!win.webContents.getURL().includes("lobby.html")) {
             win.loadFile("lobby.html").then(() => {

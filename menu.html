@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Menu</title>
+    <link rel="stylesheet" href="css/lobby.css">
+    <style>
+        .menu {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            flex: 1;
+        }
+
+        .menu button {
+            width: 220px;
+            min-height: 52px;
+            font-size: 17px;
+        }
+    </style>
+</head>
+<body>
+    <div class="menu">
+        <button class="primary" id="lobby">LOBBY</button>
+        <button class="primary" id="tournaments">TOURNAMENTS</button>
+    </div>
+    <script>
+        function createCommand(command, params = {}) { return { command, params }; }
+        
+        // Enter lobby button
+        document.getElementById("lobby").addEventListener("click", function() {
+            let msg = createCommand("lobby");
+            window.fbchess.sendGUICommand(msg);
+        });
+        
+        // Enter tournaments
+        document.getElementById("tournaments").addEventListener("click", function() {
+            let msg = createCommand("tournaments");
+            window.fbchess.sendGUICommand(msg);
+        });
+    </script>
+</body>
+</html>
