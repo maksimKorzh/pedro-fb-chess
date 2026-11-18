@@ -31,6 +31,13 @@ window.fbchess.onWebSocketMsg((data) => {
         document.getElementById("connection-status").innerText = "DISCONNECTED"
     }
     
+    // Contest list
+    if (data.command == "CONTEST.LIST") {
+      tournamentId = data.params.tournamentId;
+      msg = createCommand("tournament.enter", { "tournamentId": tournamentId });
+      window.fbchess.sendGUICommand(msg);
+    }
+    
     // Player status
     if (data.command == "LOGIN_FB_SIGNATURE2") {
         player = {

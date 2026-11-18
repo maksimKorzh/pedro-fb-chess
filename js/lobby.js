@@ -221,3 +221,8 @@ challengeList.addEventListener("click", event => {
     });
     window.fbchess.sendGUICommand(msg);
 });
+
+// Go back to menu button
+document.getElementById("menu").addEventListener("click", () => {
+    msg = createCommand("menu", {}); window.fbchess.sendGUICommand(msg);
+});
