@@ -1,8 +1,8 @@
 // Temp
-const DEBUG = true;
+// PROFE PINO EDIT #008 — Always use the current authorized Facebook session.
 
 // Packages
-const { app, BrowserWindow, ipcMain, Menu } = require("electron");
+const { app, BrowserWindow, ipcMain, Menu, session } = require("electron");
 const { spawn } = require("child_process");
 const WebSocket = require("ws");
 const os = require("os");
@@ -11,7 +11,15 @@ const path = require("path");
 // App globals
 var socket = null;
 var fbCredentials = null;
+// PROFE PINO - Facebook account selector
+let selectedFacebookAccount = null;
+// Separate saved Facebook sessions
+const FACEBOOK_SESSIONS = {
+    personal: "persist:fbchess-personal",
+    test: "persist:fbchess-test"
+};
 var win = null;
+var loginWindow = null;
 var engine = null;
 
 // App constants
@@ -50,21 +58,55 @@ const OPCODES = {
     "PLAY": 502,
     "MOVE": 529,
     "LOGIN_FB_SIGNATURE2": 616,
+    "MM.SIZE_CHANGED": 631,
+    "MM.CANCELED": 632,
+    "MM.MATCHED": 633,
+    "CONTEST.LIST": 645,
     "CONTEST.ENTER": 641,
     "CONTEST.FETCH_CURRENT": 644,
-    "CONTEST.LIST": 645
+    "CONTEST.ENTER_MATCH": 647
+
 };
 
-if (DEBUG) {
-    fbCredentials = {
-      id: '29468922622700128',
-      locale: 'en_GB',
-      name: null,
-      photo: null,
-      signature: '-j5n8Bez8tOD5B3mtNSwWBfIYkG6UPo_RTFWpaqcK5I.eyJhbGdvcml0aG0iOiJITUFDLVNIQTI1NiIsImlzc3VlZF9hdCI6MTc5NDk5NDkwNywicGxheWVyX2lkIjoiMjk0Njg5MjI2MjI3MDAxMjgiLCJyZXF1ZXN0X3BheWxvYWQiOiJoZWxsbyJ9',
-      timestamp: 1794994907674
-    }
+// PROFE PINO EDIT #008 — No alternate account credentials in source code.
+let loginPollTimer = null;
+let loginPollBusy = false;
+let loginFinished = false;
+let heartbeatTimer = null;
+let activeSocketSender = null;
 
+function notifySocket(sender, message) {
+    try {
+        if (sender && !sender.isDestroyed()) sender.send("websocket", message);
+    } catch (error) {
+        console.error("Renderer notification failed:", error.message);
+    }
+}
+
+function stopHeartbeat() {
+    if (heartbeatTimer !== null) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+    }
+}
+
+function stopLoginPolling() {
+    if (loginPollTimer !== null) {
+        clearInterval(loginPollTimer);
+        loginPollTimer = null;
+    }
+}
+
+function closeChessSocket() {
+    stopHeartbeat();
+    const previous = socket;
+    socket = null;
+    activeSocketSender = null;
+    if (previous && previous.readyState !== WebSocket.CLOSED) {
+        try { previous.close(); } catch (error) {
+            console.error("WebSocket close error:", error.message);
+        }
+    }
 }
 
 /*******************************
@@ -75,9 +117,9 @@ if (DEBUG) {
 // Verified current working values: 256 MB hash, 4 threads, 500 ms per move.
 // Documentation only: no settings changed.
 const ENGINE_CONFIG = {
-    hashMb: 256,
-    threads: 4,
-    moveTimeMs: 500
+    hashMb: 512,
+    threads: 6,
+    moveTimeMs: 800
 };
 // PROFE PINO EDIT #007 END
 
@@ -141,6 +183,7 @@ function writeEngine(command) {
 
 // PROFE PINO EDIT #002 — Queue requests while initializing or searching;
 // stop an old search before starting the latest requested position.
+let engineScoreSign = 1;
 function startEngineSearch(position) {
     if (!position) return;
 
@@ -172,7 +215,7 @@ function startEngineSearch(position) {
         writeEngine("stop");
         return;
     }
-
+    engineScoreSign = /^position\s+fen\s+\S+\s+b(?:\s|$)/.test(position) ? -1 : 1;
     searchInProgress = true;
 
     console.log("Stockfish position:", position);
@@ -291,7 +334,20 @@ function initEngine(sender) {
 
                 continue;
             }
+            if (line.startsWith("info ") && searchInProgress && !pendingPosition) {
+                const depth = line.match(/\bdepth\s+(\d+)/);
+                const score = line.match(/\bscore\s+(cp|mate)\s+(-?\d+)(?=\s|$)/);
+                const isBound = /\b(?:lowerbound|upperbound)\b/.test(line);
 
+                if (depth && score && !isBound && engineSender && !engineSender.isDestroyed?.()) {
+                    engineSender.send("engine", JSON.stringify({
+                        type: "analysis",
+                        depth: Number(depth[1]),
+                        scoreType: score[1],
+                        score: Number(score[2]) * engineScoreSign
+                    }));
+                }
+            }
             // PROFE PINO EDIT #002 — Parse bestmove and deliver it to game.js.
             if (line.startsWith("bestmove ")) {
                 searchInProgress = false;
@@ -379,131 +435,279 @@ function initEngine(sender) {
            WEB SOCKET
 *******************************/
 
-function fbLogin(win) {
-    win.loadURL(
-        "https://www.facebook.com/gaming/play/194060244713436/"
-    );
+// PROFE PINO EDIT #008 — One authorized FBInstant login and one socket.
+function fbLogin(window) {
+    loginFinished = false;
+    loginPollBusy = false;
+    fbCredentials = null;
+    stopLoginPolling();
 
-    const interval = setInterval(async () => {
-        if (!win || win.isDestroyed()) {
-            clearInterval(interval);
+    window.loadURL("https://www.facebook.com/gaming/play/194060244713436/")
+        .catch(error => console.error("Facebook page failed to load:", error.message));
+
+    loginPollTimer = setInterval(async () => {
+        if (loginPollBusy || loginFinished) return;
+        if (!window || window.isDestroyed() || window.webContents.isDestroyed()) {
+            stopLoginPolling();
             return;
         }
-
-        const frames =
-            win.webContents.mainFrame.framesInSubtree;
-
-        for (const frame of frames) {
-            if (!frame.url.includes("194060244713436")) {
-                continue;
-            }
-
-            try {
-                const credentials =
-                    await frame.executeJavaScript(`
-                    (async () => {
-                        if (!window.FBInstant) {
-                            throw new Error("FBInstant is unavailable");
-                        }
-
-                        const signedInfo =
-                            await FBInstant.player.getSignedPlayerInfoAsync("hello");
-
-                        let playerId = FBInstant.player.getID();
-
-                        if (playerId == null || playerId === "") {
-                            playerId = signedInfo.getPlayerID();
-                        }
-
-                        return {
-                            id: playerId,
-                            name: FBInstant.player.getName?.() ?? null,
-                            photo: FBInstant.player.getPhoto?.() ?? null,
-                            signature: signedInfo.getSignature(),
-                            locale: FBInstant.getLocale(),
-                            timestamp: Date.now()
-                        };
-                    })();
-                `);
-
-                if (
-                    credentials?.id &&
-                    credentials?.signature
-                ) {
+        loginPollBusy = true;
+        try {
+            const frames = window.webContents.mainFrame.framesInSubtree;
+            for (const frame of frames) {
+                if (!frame.url.includes("194060244713436")) continue;
+                try {
+                    const credentials = await frame.executeJavaScript(`
+                        (async () => {
+                            if (!window.FBInstant) throw new Error("FBInstant unavailable");
+                            const signed = await FBInstant.player.getSignedPlayerInfoAsync("hello");
+                            const id = FBInstant.player.getID() || signed.getPlayerID();
+                            return {
+                                id,
+                                name: FBInstant.player.getName?.() ?? null,
+                                photo: FBInstant.player.getPhoto?.() ?? null,
+                                signature: signed.getSignature(),
+                                locale: FBInstant.getLocale(),
+                                timestamp: Date.now()
+                            };
+                        })();
+                    `);
+                    if (!credentials?.id || !credentials?.signature) continue;
+                    if (loginFinished) return;
+                    loginFinished = true;
+                    stopLoginPolling();
                     fbCredentials = credentials;
-                    console.log(fbCredentials);
-                    console.log(
-                        "Credentials stored globally."
-                    );
-
-                    clearInterval(interval);
-
-                    await win.loadFile("menu.html");
-                    break;
+                    console.log("FBInstant credentials acquired (secret values hidden).");
+                    if (!window.isDestroyed()) {
+                        await window.loadFile("lobby.html");
+                    }
+                    return;
+                } catch (error) {
+                    // The embedded game may not have initialized FBInstant yet.
+                    // Never log signed credentials or other authentication data.
+                    if (!/FBInstant unavailable/.test(error.message)) {
+                        console.log("Waiting for Facebook game authentication.");
+                    }
                 }
-
-            } catch (error) {
-                console.log(
-                    "Waiting for credentials:",
-                    error.message
-                );
             }
+        } catch (error) {
+            console.error("Facebook frame inspection failed:", error.message);
+        } finally {
+            loginPollBusy = false;
         }
     }, 3000);
 }
 
 function connect(sender) {
-    socket = new WebSocket(
-        "wss://chess.game8.io/ws/gameServer",
-        {
-            headers: {
-                "Origin": "null"
+    if (!fbCredentials?.id || !fbCredentials?.signature) {
+        notifySocket(sender, {
+            command: "WebSocket Error", params: {
+                message: "Facebook authentication is not ready."
             }
+        });
+        return null;
+    }
+
+    // Repeated renderer connect requests must not create parallel sockets.
+    if (socket && (socket.readyState === WebSocket.OPEN ||
+        socket.readyState === WebSocket.CONNECTING)) {
+        console.log("Chess WebSocket already connected or connecting.");
+        return socket;
+    }
+
+    stopHeartbeat();
+    const ws = new WebSocket("wss://chess.game8.io/ws/gameServer", {
+        headers: { Origin: "null" }
+    });
+    socket = ws;
+    activeSocketSender = sender;
+    let loggedInPlayerId = null;
+    let loggedInPlayerName = "";
+    let pendingTournamentTable = null;
+
+    ws.on("open", () => {
+        if (socket !== ws) return;
+        try {
+            ws.send(loginFbSignature2());
+            console.log("Chess login request sent; awaiting server response.");
+            notifySocket(sender, { command: "Connected to WebSocket" });
+        } catch (error) {
+            console.error("Could not send chess login:", error.message);
+            notifySocket(sender, { command: "WebSocket Error" });
+            closeChessSocket();
         }
-    );
+    });
 
-    socket.on("open", function () {
-        let login = loginFbSignature2();
+    ws.on("message", data => {
+        if (socket !== ws) return;
+        const incomingOpcode = data.length >= 2 ? data.readUInt16BE(0) : null;
+        console.log("SERVER OPCODE:", incomingOpcode);
+        if (incomingOpcode === 419) {
+            console.log(
+                "OPCODE 419:",
+                "LENGTH:", data.length,
+                "HEX:", data.toString("hex")
+            );
+        }
+        if (incomingOpcode === 431) {
+            console.log(
+                "TOURNAMENT 431:",
+                "LENGTH:", data.length,
+                "HEX:", data.toString("hex")
+            );
+        }
+        if (incomingOpcode === 418 || incomingOpcode === 649) {
+            console.log(
+                "GAME RESULT:",
+                "OPCODE:", incomingOpcode,
+                "LENGTH:", data.length,
+                "HEX:", data.toString("hex")
+            );
+        }
+        if (incomingOpcode === 633) {
+            console.log(
+                "TOURNAMENT 633:",
+                "LENGTH:", data.length,
+                "HEX:", data.toString("hex")
+            );
+        }
+        if (incomingOpcode === 631) {
+            console.log(
+                "MATCHMAKING 631:",
+                "LENGTH:", data.length,
+                "HEX:", data.toString("hex")
+            );
+        }
+        if (incomingOpcode === 641 || incomingOpcode === 644 || incomingOpcode === 647) {
+            console.log(
+                "TOURNAMENT RESPONSE:",
+                incomingOpcode,
+                "LENGTH:",
+                data.length,
+                "HEX:",
+                data.subarray(2).toString("hex")
+            );
+        }
+        try {
+            const message = parseMessage(data);
+            if (message.command === "CONTEST.FETCH_CURRENT") {
+                console.table(message.params.players.map(profile => ({
+                    rank: profile.rank,
+                    name: profile.playerName,
+                    score: profile.score
+                })));
 
-        socket.send(login);
-
-        sender.send("websocket", {
-            command: "Connected to WebSocket"
-        });
-
-        setInterval(function () {
-            try {
-                if (socket && socket.readyState === WebSocket.OPEN) {
-                    socket.send(keepAlive());
+                if (message.params.standingsError) {
+                    console.warn(message.params.standingsError);
                 }
-            } catch (error) {
-                console.error("Keepalive error:", error);
             }
-        }, KEEP_ALIVE_INTERVAL);
+            if (message.command === "CONTEST.LIST") {
+                const { tournamentCount, firstTournamentId } = message.params;
+                console.log("TOURNAMENT LIST:", message.params);
+
+                if (tournamentCount === 1 && firstTournamentId) {
+                    ws.send(enterContest(firstTournamentId));
+                }
+            }
+
+            if (message.command === "LOGIN_FB_SIGNATURE2") {
+                loggedInPlayerId = message.params.playerId;
+                loggedInPlayerName = message.params.playerFullName || message.params.playerNickName;
+                console.log("Chess server returned login response (616).");
+                ws.send(requestTournamentList());
+                console.log(
+                    "LOGIN TOURNAMENT INFO:",
+                    "activeTournaments =", message.params.activeTournaments,
+                    "playerId =", message.params.playerId
+                );
+                // Start heartbeats only after a successfully parsed login response.
+                if (heartbeatTimer === null) {
+                    heartbeatTimer = setInterval(() => {
+                        if (socket !== ws || ws.readyState !== WebSocket.OPEN) {
+                            stopHeartbeat();
+                            return;
+                        }
+                        try { ws.send(keepAlive()); }
+                        catch (error) {
+                            console.error("Heartbeat failed:", error.message);
+                            stopHeartbeat();
+                        }
+                    }, KEEP_ALIVE_INTERVAL);
+                }
+            } else if (!message.command) {
+                const opcode = data.length >= 2 ? data.readUInt16BE(0) : null;
+                console.warn("Unrecognized chess server opcode:", opcode);
+            }
+            if (message.command === "MM.MATCHED") {
+                if (loggedInPlayerId == null) return;
+                console.log("TOURNAMENT MATCH FOUND:", message.params);
+                const opponent = {
+                    playerId: message.params.opponentId,
+                    playerName: message.params.opponentName,
+                    avatarId: message.params.avatarId,
+                    avatarUrl: message.params.avatarUrl
+                };
+                getAvatar({ params: opponent });
+
+                const tablePath = message.params.tablePath;
+                const parts = tablePath.split(".");
+                const roomId = Number(parts[2]);
+                const tableId = Number(parts[3]);
+
+                win.loadFile("game.html").then(() => {
+                    sender.send("websocket", {
+                        command: "ID_INFO",
+                        params: {
+                            playerId: loggedInPlayerId,
+                            playerName: loggedInPlayerName,
+                            tournamentOpponent: opponent,
+                            roomId: roomId,
+                            tableId: tableId
+                        }
+                    });
+
+                    // Enter the tournament table first.
+                    pendingTournamentTable = { roomId, tableId };
+                    ws.send(enterPlace(tablePath));
+                    console.log("TOURNAMENT: Entering", tablePath);
+                });
+            }
+            if (message.command === "ENTER_PLACE_RESPONSE" && pendingTournamentTable) {
+                const { roomId, tableId } = pendingTournamentTable;
+                pendingTournamentTable = null;
+
+                ws.send(getTableData(roomId, tableId));
+                ws.send(getCurrentPath());
+            }
+            notifySocket(sender, message);
+        } catch (error) {
+            // A rejection or unexpected packet may have a different payload layout.
+            // Do not print the raw packet; it could contain sensitive information.
+            console.error("Chess response could not be parsed:", error.message);
+            notifySocket(sender, {
+                command: "WebSocket Error", params: {
+                    message: "Unexpected server response. Stop and check account status."
+                }
+            });
+            closeChessSocket();
+        }
     });
 
-    socket.on("message", function (data) {
-        sender.send(
-            "websocket",
-            parseMessage(data)
-        );
+    ws.on("error", error => {
+        if (socket !== ws) return;
+        console.error("Chess WebSocket error:", error.message);
+        notifySocket(sender, { command: "WebSocket Error" });
     });
 
-    socket.on("error", function (error) {
-        console.error("WebSocket error:", error);
-
-        sender.send("websocket", {
-            command: "WebSocket Error"
-        });
+    ws.on("close", (code) => {
+        if (socket !== ws) return;
+        stopHeartbeat();
+        socket = null;
+        activeSocketSender = null;
+        console.log("Chess WebSocket closed. Code:", code);
+        notifySocket(sender, { command: "WebSocket connection closed" });
     });
-
-    socket.on("close", function () {
-        sender.send("websocket", {
-            command: "WebSocket connection closed"
-        });
-    });
-
-    return socket;
+    return ws;
 }
 
 /*******************************
@@ -695,6 +899,15 @@ function readAscii(buf) {
         readInt8Array(length, buf)
     );
 }
+function readLongAscii(buf) {
+    const length = readInt(buf);
+
+    if (length < 0 || length > buf.data.length - buf.offset) {
+        throw new Error("Invalid long ASCII length");
+    }
+
+    return int8TOascii(readInt8Array(length, buf));
+}
 
 function readShort(buf) {
     let value = buf.data[buf.offset++];
@@ -804,6 +1017,7 @@ function createMessage(opcode, writePayload = () => { }) {
 
 function loginFbSignature2() {
     return createMessage("LOGIN_FB_SIGNATURE2", msg => {
+        console.log("FACEBOOK ID LENGTH:", String(fbCredentials.id).length);
         writeAscii(fbCredentials.id, msg);
         writeLongAscii(fbCredentials.signature, msg);
         writeString(fbCredentials.name, msg);
@@ -879,27 +1093,31 @@ function createTable(betAmountId, tableArgs, tableName) {
     });
 }
 
+
 function kickPlayer(playerId) {
     return createMessage("KICK_PLAYER", msg => {
         writeLong(playerId, msg);
     });
 }
-
-function getTournaments() {
-  return createMessage("CONTEST.LIST");
+function requestTournamentList() {
+    return createMessage("CONTEST.LIST");
+}
+function fetchTournaments() {
+    return createMessage("CONTEST.FETCH_CURRENT", msg => {
+        writeByte(1, msg);
+    });
 }
 
-function enterTournament(tournamentId) {
-  return createMessage("CONTEST.ENTER", msg => {
-      writeAscii(tournamentId, msg);
-  });
+function enterTournamentMatch() {
+    return createMessage("CONTEST.ENTER_MATCH");
 }
 
-function fetchCurrentTournament() {
-  return createMessage("CONTEST.FETCH_CURRENT", msg => {
-      writeByte(1, msg);
-  });
+function enterContest(tourId) {
+    return createMessage("CONTEST.ENTER", msg => {
+        writeAscii(tourId, msg);
+    });
 }
+
 
 /*******************************
          MESSAGE PARSING
@@ -931,7 +1149,51 @@ function getAvatar(response) {
 
     response.params.avatarUrl = url;
 }
+function readTournamentStandings(buf) {
+    readByte(buf);
+    const prizeCount = readByte(buf) & 255;
 
+    for (let i = 0; i < prizeCount; i++) {
+        readInt(buf);
+        const itemCount = readByte(buf) & 255;
+
+        for (let j = 0; j < itemCount; j++) {
+            readAscii(buf);
+            readAscii(buf);
+            readLong(buf);
+        }
+    }
+
+    const playerCount = readByte(buf) & 255;
+    const players = [];
+
+    for (let i = 0; i < playerCount; i++) {
+        const playerId = readLong(buf);
+        const playerName = readString(buf);
+        const avatarUrl = readLongAscii(buf);
+        const avatarId = readShort(buf);
+        const rank = readShort(buf);
+        const score = readLong(buf);
+        const scoreDescription = readString(buf);
+        const online = readByte(buf) === 1;
+
+        const profile = {
+            playerId,
+            playerName,
+            avatarUrl,
+            avatarId,
+            rank,
+            score,
+            scoreDescription,
+            online
+        };
+
+        getAvatar({ params: profile });
+        players.push(profile);
+    }
+
+    return { players };
+}
 function parseMessage(data) {
     let response = {
         command: "",
@@ -950,6 +1212,13 @@ function parseMessage(data) {
             response.command = "PONG";
             break;
 
+        case 401:
+            response.command = "ENTER_PLACE_RESPONSE";
+            response.params = {
+                raw: Buffer.from(data).toString("hex")
+            };
+            break;
+
         case 406:
             response.command = "PLAYER_ENTERED";
 
@@ -966,6 +1235,7 @@ function parseMessage(data) {
                 starBalance: readLong(buf)
             };
 
+            getAvatar(response);
             break;
 
         case 407:
@@ -1056,6 +1326,13 @@ function parseMessage(data) {
 
         case 418:
             response.command = "GAME_OVER";
+            break;
+
+        case 419:
+            response.command = "ENTER_STATE";
+            response.params = {
+                stateId: readByte(buf)
+            };
             break;
 
         case 420:
@@ -1164,6 +1441,73 @@ function parseMessage(data) {
 
             break;
 
+
+        case 631:
+            response.command = "MM.SIZE_CHANGED";
+            response.params = { size: readShort(buf) };
+            break;
+
+        case 632:
+            response.command = "MM.CANCELED";
+            response.params = { message: readString(buf) };
+            break;
+
+        case 633:
+            response.command = "MM.MATCHED";
+            response.params = {
+                opponentId: readLong(buf),
+                opponentName: readString(buf),
+                avatarId: readShort(buf),
+                avatarUrl: readLongAscii(buf),
+                tablePath: readAscii(buf)
+            };
+            break;
+
+        case 645: {
+            readByte(buf);
+            const tournamentCount = readByte(buf);
+
+            response.command = "CONTEST.LIST";
+            response.params = { tournamentCount };
+
+            if (tournamentCount > 0) {
+                readLong(buf); // Meaning of this field is still unknown.
+                response.params.firstTournamentId = readAscii(buf);
+            }
+
+            break;
+
+        }
+        case 641:
+            response.command = "CONTEST.ENTER";
+            response.params = {
+                contestId: readLong(buf),
+                contestType: readAscii(buf),
+                tourId: readAscii(buf)
+            };
+            break;
+
+        case 644: {
+            response.command = "CONTEST.FETCH_CURRENT";
+
+            try {
+                response.params = readTournamentStandings(buf);
+            } catch (error) {
+                response.params = {
+                    players: [],
+                    standingsError: "Could not read tournament standings."
+                };
+                console.warn("Tournament standings:", error.message);
+            }
+
+            break;
+        }
+
+        case 647:
+            response.command = "CONTEST.ENTER_MATCH";
+            break;
+
+
         case 616:
             readByte(buf);
 
@@ -1232,118 +1576,10 @@ function parseMessage(data) {
                 (1 == readByte(buf));
 
             break;
-        case 641:
-            readByte(buf);
-            response.command = "CONTEST.ENTER";
-            response.params = {
-                "tournamentId": readLong(buf),
-                "tournamentType": readAscii(buf),
-                "tournamentName": readAscii(buf)
-            }
-            break;
-        case 644:
-            readByte(buf);
-            response.command = "CONTEST.FETCH_CURRENT";
-            response.params = {};
-            
-            // Get players count
-            let playersCount = readByte(buf);
-            response.params.playersCount = playersCount;
-            response.params.coins = [];
-            response.params.players = [];
-            
-            // Skip unknown section
-            response.params.n1 = readInt(buf);
-            response.params.n2 = readByte(buf);
-            response.params.n3 = readAscii(buf);
-            response.params.n4 = readAscii(buf);
-            response.params.n5 = readLong(buf);
-            
-            // Parse "COIN" section
-            let coins = [];
-            for (let i = 0; i < playersCount; i++) {
-                coins.push({
-                    "n1": readAscii(buf),
-                    "n2": readLong(buf),
-                    "n3": readInt(buf),
-                    "n4": readByte(buf),
-                    "n5": readByte(buf)
-                });
-            } response.params.coins.push(coins);
-            
-            // Skip unknown section
-            readLong(buf);
-            readInt(buf);
-            
-            // Skip offset
-            readShort(buf);
-            readByte(buf);
-            
-            // Parse player section
-            let players = [];
-            for (let i = 0; i < playersCount-1; i++) {
-                players.push({
-                    "avatarUrl": readAscii(buf),
-                    "n2": readShort(buf),
-                    "playerStanding": readShort(buf),
-                    "playerEloRating": readLong(buf),
-                    "n4": readShort(buf),
-                    "n5": readByte(buf),
-                    "chipBalance": readLong(buf),
-                    "playerName": readString(buf),
-                    "n8": readShort(buf),
-                    "n9": readByte(buf)
-                });
-            } response.params.players.push(players);
-
-            
-            // PLAYERS
-            //console.log("avatarUrl", readAscii(buf));
-            
-            // ?
-            /*console.log("?", readShort(buf));
-            
-            // STANDING
-            console.log("Standing", readShort(buf));
-            
-            // ? LONG
-            console.log("Rating", readLong(buf));
-            
-            console.log("?", readShort(buf));
-            console.log("?", readByte(buf));
-            console.log("Coins", readLong(buf));
-            
-            
-            console.log(readString(buf));
-            console.log(readShort(buf));
-            console.log(readByte(buf));
-            
-            //Next player
-            console.log(readAscii(buf));*/
-            
-            console.log(response.params.coins);
-            
-            console.log(data.toString("hex"));
-            
-
-            break;
-        case 645:
-            readByte(buf);
-            response.command = "CONTEST.LIST";
-            response.params = {
-                "availableTournaments?": readByte(buf),
-                "unknownLong": readLong(buf),
-                "tournamentId": readAscii(buf)
-            };
-            break;
     }
 
     return response;
 }
-
-// let p = parseMessage(Buffer.from("028400140000000102054d4544414c0948435f5468616e6b730000000000000ff404434f494e000000000000030d40000000020104434f494e0000000000000222e0000000030104434f494e0000000000000186a0000000040104434f494e000000000000002710000000050104434f494e000000000000002710000000060104434f494e000000000000002710000000070104434f494e000000000000002710000000080104434f494e000000000000002710000000090104434f494e0000000000000027100000000a0104434f494e0000000000000027100000000b0104434f494e0000000000000027100000000c0104434f494e0000000000000027100000000d0104434f494e0000000000000027100000000e0104434f494e0000000000000027100000000f0104434f494e000000000000002710000000100104434f494e000000000000002710000000110104434f494e000000000000002710000000120104434f494e000000000000002710000000130104434f494e000000000000002710000000140104434f494e    000000000000002710140000000001b633cd0003005301a1006e000000                                                                                                              4468747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3032392f32383731383032392e706e673f743d3137393438343834393900a00001000000000000069a0000010000000002661129000500420065006b0069006d0000004468747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3439372f34303234333439372e706e673f743d3137393432373830313700eb0002000000000000068b000001000000000081a15600050042006f0062006f00740000004368747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3434362f383439353434362e706e673f743d31373732363034323633000c0003000000000000067b0000000000000003527e57000800560020004d0020004a00680065006b0000003768747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3934332f35353733373934332e706e67007c0004000000000000067400000000000000021e023d00030414043e043d0000004468747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3038352f33353532313038352e706e673f743d313737333539393532310098000500000000000006670000010000000003b46cb0000800540068006500200048006f007000650000003768747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3935322f36323135353935322e706e6700a3000600000000000006670000000000000003c4a847000e004401b001a1006e006700200042006900670020004400690063006b00000000002d0007000000000000065e0000010000000000352d9f0007005000610074007200690063006b0000003668747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3038372f333438353038372e706e6700d80008000000000000065d000001000000000096c10300060421043504400451043304300000004368747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3831312f393837393831312e706e673f743d31373934343636303035015d0009000000000000065b000001000000000084d366000b004a006100760068006c0061006e0074006f006700730000004368747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3837302f383730343837302e706e673f743d313737323534313535370012000a000000000000065a00000100000000025bac54000300420065006e0000004468747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3332342f33393536323332342e706e673f743d3137373236303933363100ce000b0000000000000658000000000000000395bdd10008041c04380440043e0441043b043004320000004468747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3130352f36303134353130352e706e673f743d31373732363037323634002c000c00000000000006560000000000000003bf1e8b000b005000650074007200750073002000740061006e006100000000009c000d00000000000006520000010000000000b8849a000600480065006e0064007200610000004468747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3537302f31323039323537302e706e673f743d3137373235343231383901ac000e000000000000065000000000000000039714ca000d004c0061006c00630068006800750061006e00610077006d00610000004468747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3930362f36303233323930362e706e673f743d3137373235383233373000d3000f000000000000064f000000000000000288082b0006005400650062006f0067006f0000003768747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3431392f34323436393431392e706e67015f0010000000000000064e0000000000000002bc1ad3000400440169006e00670000004468747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3036372f34353838323036372e706e673f743d3137373235393735313401a90011000000000000064700000000000000024ad8a000060053006f006c00770069006e0000003768747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3535322f33383435393535322e706e6700440012000000000000064400000100000000036e62530005004a006f0072006700650000004468747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3737392f35373536353737392e706e673f743d3137373236303730353800ea0013000000000000063d000001000000000041dcc400070041006b002000530061006d00790000003668747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3335362f343331363335362e706e67014d0014000000000000063b000000019900000000000005dc0000001d005400680061006e006b00730067006900760069006e006700200046006500730074006900760061006c002000320030003200360020005700340135007b0020002200700068006f0074006f0022003a0020002200680074007400700073003a002f002f00630064006e002e00670061006d006500760068002e006d0065002f00750070006c006f00610064002f0066006200690067002f00630068006500730073002f007400680061006e006b00730031002e0070006e00670022002c00200022006700750069006400650022003a0020002200680074007400700073003a002f002f00630064006e002e00670061006d006500760068002e006d0065002f00750070006c006f00610064002f0066006200690067002f00630068006500730073002f00670075006900640065005f002400740079007000650024005f0024006c006f00630061006c00650024002e00680074006d006c003f007600310022002c00200022006d0061007400630068002d006d0061006b0069006e00670022003a0020007b0020002200640022003a002000310030002c0020002200730022003a0020003300300020007d002c00200022006d00610074006300680022003a0020007b0020002200640065006e006f006d0069006e006100740069006f006e0022003a00200033002c00200022006d0061007400630068004400750072006100740069006f006e0022003a0020002200350022002c00200022007400750072006e004400750072006100740069006f006e0022003a00200022003300300022002c00200022006100630063004400750072006100740069006f006e0022003a0020002200300022002c0020002200660069007200730074005400750072006e004400750072006100740069006f006e0022003a002000220039003000220020007d0020007d010000000003c73a3a0007004c006f007200690061006e006e0000000000ef019800000000000005dc00000001", "hex"));
-// let n = parseMessage(Buffer.from("028400140000000102054d4544414c0948435f5468616e6b730000000000000ff404434f494e000000000000030d40000000020104434f494e0000000000000222e0000000030104434f494e0000000000000186a0000000040104434f494e000000000000002710000000050104434f494e000000000000002710000000060104434f494e000000000000002710000000070104434f494e000000000000002710000000080104434f494e000000000000002710000000090104434f494e0000000000000027100000000a0104434f494e0000000000000027100000000b0104434f494e0000000000000027100000000c0104434f494e0000000000000027100000000d0104434f494e0000000000000027100000000e0104434f494e0000000000000027100000000f0104434f494e000000000000002710000000100104434f494e000000000000002710000000110104434f494e000000000000002710000000120104434f494e000000000000002710000000130104434f494e000000000000002710000000140104434f494e    000000000000002710140000000003c74472000c004400e2006e0020004300e0007900200043006800610079000000000152000100000000000006e70000010000000001b633cd0003005301a1006e000000    4468747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3032392f32383731383032392e706e673f743d3137393438343834393900a0000200000000000006d300000100000000020bfe6e0005004100720074007500720000003768747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3436322f33343334303436322e706e67014e000300000000000006990000010000000003c4a847000e004401b001a1006e006700200042006900670020004400690063006b00000000002d0004000000000000068f00000100000000021e023d00030414043e043d0000004468747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3038352f33353532313038352e706e673f743d3137373335393935323100980005000000000000067e000000000000000081a15600050042006f0062006f00740000004368747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3434362f383439353434362e706e673f743d31373732363034323633000c0006000000000000067b0000000000000003527e57000800560020004d0020004a00680065006b0000003768747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3934332f35353733373934332e706e67007c000700000000000006740000000000000000352d9f0007005000610074007200690063006b0000003668747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3038372f333438353038372e706e6700d80008000000000000066d0000010000000002eb7f6f0007004d006900680061006a006c006f0000004468747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3031352f34383938383031352e706e673f743d3137373235343139343800060009000000000000066a00000100000000029178a10007004c0075007900e1006e006400610000004468747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3033332f34333038383033332e706e673f743d3137373235353036353300d3000a0000000000000669000000000000000395bdd10008041c04380440043e0441043b043004320000004468747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3130352f36303134353130352e706e673f743d31373732363037323634002c000b00000000000006680000000000000003b46cb0000800540068006500200048006f007000650000003768747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3935322f36323135353935322e706e6700a3000c00000000000006670000000000000002d4e0010007004c0065006700610073007000690000003768747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3430392f34373530353430392e706e670166000d00000000000006650000010000000001e2c8b8000800420065006e006a0061006d0069006e0000004468747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3733362f33313633393733362e706e673f743d3137373236303635313500a3000e000000000000066200000000000000036e62530005004a006f0072006700650000004468747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3737392f35373536353737392e706e673f743d3137373236303730353800ea000f000000000000066000000000000000025bac54000300420065006e0000004468747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3332342f33393536323332342e706e673f743d3137373236303933363100ce0010000000000000065800000000000000029ee7240008005300750074007200690073006e006f0000004468747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3239322f34333936383239322e706e673f743d31373739323434363431009e001100000000000006520000010000000000b8849a000600480065006e0064007200610000004468747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3537302f31323039323537302e706e673f743d3137373235343231383901ac00120000000000000650000000000000000288082b0006005400650062006f0067006f0000003768747470733a2f2f636865737363646e2e67616d65382e696f2f75706c6f61642f75736572732f3431392f34323436393431392e706e67015f0013000000000000064e0000000000000003c72e6d0003004f005400420000000001710014000000000000064b00000001f200000000000005dc0000001d005400680061006e006b00730067006900760069006e006700200046006500730074006900760061006c002000320030003200360020005700340135007b0020002200700068006f0074006f0022003a0020002200680074007400700073003a002f002f00630064006e002e00670061006d006500760068002e006d0065002f00750070006c006f00610064002f0066006200690067002f00630068006500730073002f007400680061006e006b00730031002e0070006e00670022002c00200022006700750069006400650022003a0020002200680074007400700073003a002f002f00630064006e002e00670061006d006500760068002e006d0065002f00750070006c006f00610064002f0066006200690067002f00630068006500730073002f00670075006900640065005f002400740079007000650024005f0024006c006f00630061006c00650024002e00680074006d006c003f007600310022002c00200022006d0061007400630068002d006d0061006b0069006e00670022003a0020007b0020002200640022003a002000310030002c0020002200730022003a0020003300300020007d002c00200022006d00610074006300680022003a0020007b0020002200640065006e006f006d0069006e006100740069006f006e0022003a00200033002c00200022006d0061007400630068004400750072006100740069006f006e0022003a0020002200350022002c00200022007400750072006e004400750072006100740069006f006e0022003a00200022003300300022002c00200022006100630063004400750072006100740069006f006e0022003a0020002200300022002c0020002200660069007200730074005400750072006e004400750072006100740069006f006e0022003a002000220039003000220020007d0020007d010000000003c73a3a0007004c006f007200690061006e006e0000000000ef01f100000000000005dc00000001", "hex"));
-
 /*******************************
               UI
 *******************************/
@@ -1386,16 +1622,13 @@ function createWindow() {
     const menu = Menu.buildFromTemplate(template);
     Menu.setApplicationMenu(menu);
 
-    if (DEBUG) {
-        win.loadFile("menu.html");
-    } else {
-        fbLogin(win);
-    }
+    win.loadFile("account-selector.html");
 
     win.maximize();
 
     win.on("close", () => {
-        if (socket) socket.close();
+        stopLoginPolling();
+        closeChessSocket();
 
         if (engine) {
             try {
@@ -1410,7 +1643,7 @@ function createWindow() {
 app.whenReady().then(createWindow);
 
 app.on("quit", () => {
-    if (socket) socket.close();
+    closeChessSocket();
 
     if (engine) {
         try {
@@ -1439,12 +1672,40 @@ app.on("window-all-closed", () => {
 
 ipcMain.on("gui", (event, msg) => {
 
+    if (msg.command === "select_facebook_account") {
+        if (!["personal", "test"].includes(msg.params?.account)) {
+            return;
+        }
+
+        selectedFacebookAccount = msg.params.account;
+        console.log("Selected Facebook account:", selectedFacebookAccount);
+
+        const partition = FACEBOOK_SESSIONS[selectedFacebookAccount];
+        const selectedSession = session.fromPartition(partition);
+
+        win.webContents.session.setPermissionCheckHandler(null);
+
+        loginWindow = new BrowserWindow({
+            width: 1100,
+            height: 800,
+            webPreferences: {
+                partition: partition,
+                preload: path.join(__dirname, "preload.js")
+            }
+        });
+
+        win.hide();
+        win = loginWindow;
+        fbLogin(win);
+        return;
+    }
     if (msg.command == "connect") {
-        initEngine(event.sender);
+        // Do not restart the engine when the UI repeats a connect request.
+        if (!engine) initEngine(event.sender);
         connect(event.sender);
 
     } else if (msg.command == "disconnect") {
-        if (socket) socket.close();
+        closeChessSocket();
 
         if (engine) {
             engine.kill();
@@ -1473,28 +1734,23 @@ ipcMain.on("gui", (event, msg) => {
             socket.send(pathMessage);
         }
 
-    } else if (msg.command == "tournaments") {
-        if (!win.webContents.getURL().includes("tournaments.html")) {
-            win.loadFile("tournaments.html");
-        } else {
-          let list = getTournaments();
-          socket.send(list);
-        }
-    } else if (msg.command == "tournament.enter") { console.log(msg);
-      let tournamentId = msg.params.tournamentId;
-      let tournament = enterTournament(tournamentId);
-      socket.send(tournament);
-      let fetchCurrent = fetchCurrentTournament();
-      socket.send(fetchCurrent);
     } else if (msg.command == "lobby") {
-        if (!win.webContents.getURL().includes("lobby.html")) {
-            win.loadFile("lobby.html").then(() => {
-                let lobby = enterPlace("Lobby.chess");
+
+        const openLobby = () => {
+            const lobby = enterPlace("Lobby.chess");
+
+            if (socket && socket.readyState === WebSocket.OPEN) {
                 socket.send(lobby);
-            });
+                console.log("LOBBY: Entered Lobby.chess");
+            } else {
+                console.log("LOBBY: WebSocket not ready");
+            }
+        };
+
+        if (!win.webContents.getURL().includes("lobby.html")) {
+            win.loadFile("lobby.html").then(openLobby);
         } else {
-            let lobby = enterPlace("Lobby.chess");
-            socket.send(lobby);
+            openLobby();
         }
 
     } else if (msg.command == "join") {
@@ -1536,8 +1792,6 @@ ipcMain.on("gui", (event, msg) => {
             socket.send(room);
         }
 
-    } else if (msg.command == "menu") {
-        win.loadFile("menu.html");
     } else if (msg.command == "game") {
         if (!win.webContents.getURL().includes("game.html")) {
             win.loadFile("game.html").then(() => {
@@ -1576,6 +1830,7 @@ ipcMain.on("gui", (event, msg) => {
             socket.send(table);
         }
 
+
     } else if (msg.command == "kick") {
         let playerId = msg.params.playerId;
         let kick = kickPlayer(playerId);
@@ -1583,6 +1838,39 @@ ipcMain.on("gui", (event, msg) => {
         if (socket && socket.readyState === WebSocket.OPEN) {
             socket.send(kick);
         }
+
+    } else if (msg.command == "tournament") {
+        const tournamentSocket = socket;
+
+        const connectionIsOpen = () =>
+            tournamentSocket &&
+            socket === tournamentSocket &&
+            tournamentSocket.readyState === WebSocket.OPEN;
+
+        if (!connectionIsOpen()) return;
+
+        setTimeout(() => {
+            if (!connectionIsOpen()) return;
+
+            console.log("TOURNAMENT: Sending FETCH_CURRENT (644)");
+            tournamentSocket.send(fetchTournaments());
+
+            setTimeout(() => {
+                if (!connectionIsOpen()) return;
+
+                tournamentSocket.send(enterTournamentMatch());
+            }, 1000);
+        }, 1000);
+
+    } else if (msg.command == "join_specific_tournament") {
+        socket.send(enterContest(msg.params.tourId));
+
+        setTimeout(() => {
+            socket.send(enterTournamentMatch());
+        }, 1000);
+
+    } else if (msg.command == "join_table") {
+        socket.send(enterPlace(msg.params.path));
 
     } else if (msg.command == "hex") {
         if (socket && socket.readyState === WebSocket.OPEN) {

@@ -1,115 +1,148 @@
 <!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Lobby</title>
-        <link rel="stylesheet" href="css/lobby.css">
-    </head>
-    <body>
-        <header class="header">
-            <h1>Lobby</h1>
-            <span class="status" id="connection-status">DISCONNECTED</span>
-            <button class="primary" id="menu">Back to menu</button>
-        </header>
-        <main class="main">
-            <!-- ROOMS -->
-            <section class="panel rooms-panel">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lobby</title>
+    <link rel="stylesheet" href="css/lobby.css">
+</head>
+<body>
+    <header class="header">
+        <h1>Lobby</h1>
+        <span class="status" id="connection-status">DISCONNECTED</span>
+        <button type="button" id="reconnect-button" disabled>Reconnect</button>
+    </header>
+
+    <main class="main">
+        <!-- ROOMS -->
+        <section class="panel rooms-panel">
+            <div class="panel-header">
+                <h2>Rooms</h2>
+            </div>
+            <div class="panel-content">
+                <div class="room-list" id="room-list"></div>
+            </div>
+        </section>
+
+        <!-- CREATE TABLE AND CHALLENGES -->
+        <div class="right-content">
+            <section class="panel create-section">
                 <div class="panel-header">
-                    <h2>Rooms</h2>
+                    <h2>Create table</h2>
+                    <span class="status" id="selected-room">Classic</span>
                 </div>
-                <div class="panel-content">
-                    <div class="room-list" id="room-list"></div>
+
+                <div style="padding: 10px 12px;">
+                    <button class="primary create-toggle" id="toggle-create">
+                        + Create new table
+                    </button>
+                </div>
+
+                <div class="create-form" id="create-form">
+                    <div class="form-grid">
+                        <div class="field">
+                            <label for="minutes">Minutes per match</label>
+                            <select id="minutes">
+                                <option value="5">5 min</option>
+                                <option value="10">10 min</option>
+                                <option value="15">15 min</option>
+                                <option value="20">20 min</option>
+                                <option value="30">30 min</option>
+                                <option value="60">60 min</option>
+                            </select>
+                        </div>
+
+                        <div class="field">
+                            <label for="seconds">Seconds per move</label>
+                            <select id="seconds">
+                                <option value="30">30 sec</option>
+                                <option value="60">60 sec</option>
+                                <option value="90">90 sec</option>
+                                <option value="120">2 min</option>
+                                <option value="180">3 min</option>
+                            </select>
+                        </div>
+
+                        <div class="field">
+                            <label for="progressive">Seconds progressive</label>
+                            <select id="progressive">
+                                <option value="0">0 sec</option>
+                                <option value="3">3 sec</option>
+                                <option value="5">5 sec</option>
+                                <option value="15">15 sec</option>
+                                <option value="30">30 sec</option>
+                                <option value="60">60 sec</option>
+                            </select>
+                        </div>
+
+                        <div class="field">
+                            <label for="bet">Bet amount</label>
+                            <select id="bet">
+                                <option value="0">50</option>
+                                <option value="1">100</option>
+                                <option value="2">250</option>
+                                <option value="3">500</option>
+                                <option value="4">1,000</option>
+                                <option value="5">2,500</option>
+                                <option value="6">5,000</option>
+                                <option value="7">10,000</option>
+                                <option value="8">25,000</option>
+                                <option value="9">50,000</option>
+                                <option value="10">100,000</option>
+                                <option value="11">250,000</option>
+                                <option value="12">500,000</option>
+                                <option value="13">1,000,000</option>
+                                <option value="14">0</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="create-actions">
+                        <button id="cancel-create">Cancel</button>
+                        <button class="primary" id="create-submit">
+                            Create table
+                        </button>
+                    </div>
                 </div>
             </section>
 
-            <!-- RIGHT SIDE -->
-            <div class="right-content">
-                <!-- CREATE TABLE -->
-                <section class="panel create-section">
-                    <div class="panel-header">
-                        <h2>Create table</h2>
-                        <span class="status" id="selected-room">Classic</span>
-                    </div>
-                    <div style="padding: 10px 12px;">
-                        <button class="primary create-toggle" id="toggle-create"> + Create new table</button>
-                    </div>
-                    <div class="create-form" id="create-form">
-                        <div class="form-grid">
-                            <div class="field">
-                                <label for="minutes">Minutes per match</label>
-                                <select id="minutes">
-                                    <option value="5">5 min</option>
-                                    <option value="10">10 min</option>
-                                    <option value="15">15 min</option>
-                                    <option value="20">20 min</option>
-                                    <option value="30">30 min</option>
-                                    <option value="60">60 min</option>
-                                </select>
-                            </div>
-                            <div class="field">
-                                <label for="seconds">Seconds per move</label>
-                                <select id="seconds">
-                                    <option value="30">30 sec</option>
-                                    <option value="60">60 sec</option>
-                                    <option value="90">90 sec</option>
-                                    <option value="120">2 min</option>
-                                    <option value="180">3 min</option>
-                                </select>
-                            </div>
-                            <div class="field">
-                                <label for="progressive">Seconds progressive</label>
-                                <select id="progressive">
-                                    <option value="0">0 sec</option>
-                                    <option value="3">3 sec</option>
-                                    <option value="5">5 sec  </option>
-                                    <option value="15">15 sec</option>
-                                    <option value="30">30 sec</option>
-                                    <option value="60">60 sec</option>
-                                </select>
-                            </div>
-                            <div class="field">
-                                <label for="bet">Bet amount</label>
-                                <select id="bet">
-                                    <option value="0">50</option>
-                                    <option value="1">100</option>
-                                    <option value="2">250</option>
-                                    <option value="3">500</option>
-                                    <option value="4">1,000</option>
-                                    <option value="5">2,500</option>
-                                    <option value="6">5,000</option>
-                                    <option value="7">10,000</option>
-                                    <option value="8">25,000</option>
-                                    <option value="9">50,000</option>
-                                    <option value="10">100,000</option>
-                                    <option value="11">250,000</option>
-                                    <option value="12">500,000</option>
-                                    <option value="13">1,000,000</option>
-                                    <option value="14">0</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="create-actions">
-                            <button id="cancel-create">Cancel</button>
-                            <button class="primary" id="create-submit">
-                                Create table
-                            </button>
-                        </div>
-                    </div>
-                </section>
+            <section class="panel challenges-section">
+                <div class="panel-header">
+                    <h2>Challenges</h2>
+                    <span class="status" id="challenge-count">0 available</span>
+                </div>
+                <div class="panel-content">
+                    <div class="challenge-list" id="challenge-list"></div>
+                </div>
+            </section>
+        </div>
 
-                <!-- CHALLENGES -->
-                <section class="panel challenges-section">
-                    <div class="panel-header">
-                        <h2>Challenges</h2>
-                        <span class="status" id="challenge-count">0 available</span>
-                    </div>
-                    <div class="panel-content">
-                        <div class="challenge-list" id="challenge-list"></div>
-                    </div>
-                </section>
+        <!-- TOURNAMENT -->
+        <section class="panel tournament-panel">
+            <div class="panel-header">
+                <h2>Current Tournament</h2>
+                <span class="status">Top 20</span>
             </div>
-        </main>
-    </body>
+
+            <div style="padding: 10px 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <button class="primary" id="tournament-btn" type="button">
+                    🏆 Tournament
+                </button>
+
+                <span id="tournament-status"
+                      role="status"
+                      aria-live="polite"
+                      style="font-size: 13px; color: #aaa;">
+                    Ready
+                </span>
+            </div>
+
+            <div class="panel-content" id="tournament-standings">
+                Standings have not been loaded.
+            </div>
+        </section>
+    </main>
+
     <script src="js/lobby.js"></script>
+</body>
 </html>
