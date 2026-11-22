@@ -45,6 +45,10 @@
                     </div>
                 </div>
             </div>
+            <div id="captured-pieces">
+                <div id="white-captures" aria-label="Pieces captured by White"></div>
+                <div id="black-captures" aria-label="Pieces captured by Black"></div>
+            </div>
             <div id="clocks">
                 <div class="clock-item">
                     <span id="stats" style="min-height: 25px; font-size: 16px; color: var(--muted); margin-top: 10px;" class="clock-value">...</span>
@@ -54,10 +58,19 @@
                 <button id="lobby">Back to Lobby</button>
                 <button id="start">Start</button>
                 <button id="resign">Resign</button>
+                <button type="button" id="flip-board">Flip Board</button>
             </div>
             <div class="button-row">
                 <button id="stockfish">Ask Stockfish for a move</button>
             </div>
+            <section id="engine-analysis" aria-label="Stockfish analysis" hidden>
+                <strong>Stockfish analysis</strong>
+                <div id="engine-assessment" role="status">Analyzing…</div>
+                <div>
+                    <span id="engine-score">—</span>
+                    <span id="engine-depth"></span>
+                </div>
+            </section>
             <pre id="output" style="width: ` + (window.innerWidth - canvas.width-34) + `px; height: ` + (canvas.width-58) + `px; font-family: monospace; font-size: calc(100vw/113); overflow: auto;"></pre>
             <input id="input" spellcheck="false" placeholder="Type a command..." style="width: ` + (window.innerWidth - canvas.width-34) + `px; font-size: 18px;" autofocus>
         </div>

@@ -1,0 +1,77 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>FBChess Account Selector</title>
+    <style>
+        body {
+            margin: 0;
+            background: #171c28;
+            color: white;
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .container {
+            text-align: center;
+            width: 360px;
+        }
+
+        h1 {
+            color: #f5c542;
+            margin-bottom: 10px;
+        }
+
+        p {
+            color: #aaa;
+            margin-bottom: 30px;
+        }
+
+        button {
+            display: block;
+            width: 100%;
+            padding: 17px;
+            margin: 15px 0;
+            border: none;
+            border-radius: 8px;
+            font-size: 17px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .personal {
+            background: #1877f2;
+            color: white;
+        }
+
+        .test {
+            background: #28a745;
+            color: white;
+        }
+
+        button:hover {
+            filter: brightness(1.15);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>♟ FBChess</h1>
+        <p>Select your Facebook account</p>
+
+        <button class="personal" id="personal">
+            Personal Facebook
+        </button>
+
+        <button class="test" id="test">
+            Test Facebook
+        </button>
+    </div>
+
+    <script src="account-selector.js"></script>
+</body>
+</html>

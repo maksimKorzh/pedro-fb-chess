@@ -7,5 +7,8 @@
     "dependencies": {
         "electron": "^33.0.1",
         "ws": "^8.22.0"
+    },
+    "devDependencies": {
+        "eslint": "^10.15.0"
     }
 }
